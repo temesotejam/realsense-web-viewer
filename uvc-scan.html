@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>RealSense UVC Auto Scan</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:#0b0f14;color:#e6edf3;min-height:100vh}header{padding:24px clamp(16px,4vw,48px);border-bottom:1px solid #28313c}h1{margin:4px 0 0;font-size:clamp(24px,4vw,38px)}.eyebrow{color:#8b949e;letter-spacing:.14em;font-size:12px}main{max-width:1100px;margin:0 auto;padding:24px 16px 48px;display:grid;gap:16px}.card{background:#111820;border:1px solid #28313c;border-radius:14px;padding:18px}.actions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}button,a.button{border:1px solid #3a4654;background:#18212b;color:#e6edf3;border-radius:9px;padding:10px 14px;font-weight:650;cursor:pointer;text-decoration:none}button.primary{background:#238636;border-color:#2ea043}button:disabled{opacity:.45;cursor:not-allowed}.muted{color:#8b949e}.ok{color:#3fb950}.warn{color:#d29922}.bad{color:#f85149}pre{margin:0;background:#090d12;border:1px solid #28313c;border-radius:10px;padding:14px;min-height:300px;max-height:64vh;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.note{line-height:1.6}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;border-bottom:1px solid #28313c;padding:9px 7px;vertical-align:top}th{color:#8b949e}code{background:#0d1117;padding:2px 5px;border-radius:5px}
+  </style>
+</head>
+<body>
+<header><div class="eyebrow">REALSENSE · UVC AUTO DIAGNOSTIC</div><h1>RealSense UVC Auto Scan</h1></header>
+<main>
+  <section class="card note">
+    This page grants camera permission, enumerates every <code>videoinput</code>, then opens each RealSense/Intel 430 input one by one. It does not modify the camera.
+    <div class="actions">
+      <button id="scanBtn" class="primary">Grant permission & scan all</button>
+      <button id="copyBtn">Copy report</button>
+      <a class="button" href="./uvc-probe.html">Manual UVC probe</a>
+      <a class="button" href="./">Viewer</a>
+    </div>
+    <div class="muted">The key result is whether an input whose label contains <b>Depth</b> appears, and whether Chrome can open it.</div>
+  </section>
+
+  <section class="card">
+    <h2>Summary</h2>
+    <table>
+      <thead><tr><th>Input</th><th>Label</th><th>Open</th><th>Actual stream</th></tr></thead>
+      <tbody id="results"><tr><td colspan="4" class="muted">Not scanned yet.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card"><h2>Diagnostic report</h2><pre id="log">Ready.</pre></section>
+</main>
+<script>
+(() => {
+  const scanBtn=document.getElementById('scanBtn');
+  const copyBtn=document.getElementById('copyBtn');
+  const logEl=document.getElementById('log');
+  const results=document.getElementById('results');
+  let report='';
+  const supported=navigator.mediaDevices?.getSupportedConstraints?.() || {};
+
+  function stamp(){return new Date().toISOString()}
+  function reset(){report='';logEl.textContent='';results.innerHTML=''}
+  function log(s=''){report+=s+'\n';logEl.textContent=report;logEl.scrollTop=logEl.scrollHeight}
+  function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function addRow(i,label,state,settings){
+    const tr=document.createElement('tr');
+    const cls=state==='OPEN'?'ok':state==='FAILED'?'bad':'warn';
+    const actual=settings?`${settings.width||'?'}×${settings.height||'?'} @ ${settings.frameRate||'?'} fps`:'—';
+    tr.innerHTML=`<td>${i}</td><td>${esc(label)}</td><td class="${cls}">${state}</td><td>${esc(actual)}</td>`;
+    results.appendChild(tr);
+  }
+
+  async function getDevicesAfterPermission(){
+    const seed=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    seed.getTracks().forEach(t=>t.stop());
+    return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  }
+
+  async function scan(){
+    reset(); scanBtn.disabled=true;
+    log(`[${stamp()}] RealSense UVC Auto Scan`);
+    log(`Browser: ${navigator.userAgent}`);
+    log(`Secure context: ${window.isSecureContext}`);
+    log(`videoKind(depth) constraint advertised: ${!!supported.videoKind}`);
+    log('');
+    try{
+      const devices=await getDevicesAfterPermission();
+      log(`All video inputs: ${devices.length}`);
+      devices.forEach((d,i)=>log(`  [${i}] label="${d.label||'(hidden)'}" groupId=${d.groupId||'(none)'}`));
+      log('');
+      const candidates=devices.map((d,i)=>({d,i})).filter(x=>/realsense|intel\(r\).*430|intel.*depth|intel.*rgb/i.test(x.d.label));
+      log(`Likely RealSense inputs: ${candidates.length}`);
+      if(!candidates.length){results.innerHTML='<tr><td colspan="4" class="bad">No RealSense-labeled video inputs found.</td></tr>';return}
+      for(const {d,i} of candidates){
+        log(''); log(`--- INPUT [${i}] ---`); log(`Label: ${d.label}`); log(`deviceId=${d.deviceId}`); log(`groupId=${d.groupId||'(none)'}`);
+        let stream=null;
+        try{
+          stream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:d.deviceId}},audio:false});
+          const track=stream.getVideoTracks()[0];
+          const settings=track.getSettings();
+          const caps=track.getCapabilities?track.getCapabilities():{};
+          log('OPEN: success');
+          log(`Track label: ${track.label||'(none)'}`);
+          log(`Settings: ${JSON.stringify(settings,null,2)}`);
+          log(`Capability keys: ${Object.keys(caps).sort().join(', ')||'(none)'}`);
+          log(`Depth-extension fields: ${('videoKind' in settings || 'videoKind' in caps)?'PRESENT':'NOT PRESENT'}`);
+          addRow(i,d.label,'OPEN',settings);
+        }catch(e){
+          log(`OPEN: FAILED — ${e.name}: ${e.message}`);
+          addRow(i,d.label,'FAILED',null);
+        }finally{
+          if(stream)stream.getTracks().forEach(t=>t.stop());
+        }
+      }
+      log('');
+      const depthNames=candidates.filter(x=>/depth/i.test(x.d.label));
+      if(depthNames.length) log(`RESULT: ${depthNames.length} RealSense input(s) explicitly contain "Depth" in the label. Check OPEN/FAILED above.`);
+      else log('RESULT: Chrome enumerated RealSense inputs, but none of their labels explicitly identify a Depth input.');
+    }catch(e){
+      log(`SCAN FAILED: ${e.name}: ${e.message}`);
+      results.innerHTML=`<tr><td colspan="4" class="bad">${esc(e.name+': '+e.message)}</td></tr>`;
+    }finally{scanBtn.disabled=false}
+  }
+
+  scanBtn.addEventListener('click',scan);
+  copyBtn.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(report);copyBtn.textContent='Copied';setTimeout(()=>copyBtn.textContent='Copy report',1000)}catch{copyBtn.textContent='Copy failed';setTimeout(()=>copyBtn.textContent='Copy report',1000)}});
+  if(!navigator.mediaDevices?.getUserMedia){scanBtn.disabled=true;reset();log('MediaDevices/getUserMedia is unavailable in this browser.')}
+})();
+</script>
+</body>
+</html>
