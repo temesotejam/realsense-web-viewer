@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>RealSense Web Viewer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">INTEL REALSENSE · WEB VISUALIZER</div>
+      <h1>RealSense Web Viewer</h1>
+    </div>
+    <div id="connectionBadge" class="badge badge-demo">DEMO</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar card">
+      <section>
+        <h2>Source</h2>
+        <div class="segmented" role="group" aria-label="Viewer mode">
+          <button class="mode-button active" data-mode="t265">T265</button>
+          <button class="mode-button" data-mode="d400">D400</button>
+          <button class="mode-button" data-mode="live">Live</button>
+        </div>
+      </section>
+
+      <section id="devicePanel">
+        <h2>Device</h2>
+        <dl class="readout-list">
+          <div><dt>Model</dt><dd id="deviceModel">T265 demo</dd></div>
+          <div><dt>Status</dt><dd id="deviceStatus">Simulated</dd></div>
+          <div><dt>FPS</dt><dd id="fpsValue">60.0</dd></div>
+        </dl>
+      </section>
+
+      <section id="t265Controls">
+        <h2>Tracking</h2>
+        <dl class="readout-list compact">
+          <div><dt>X</dt><dd id="posX">0.000 m</dd></div>
+          <div><dt>Y</dt><dd id="posY">0.000 m</dd></div>
+          <div><dt>Z</dt><dd id="posZ">0.000 m</dd></div>
+          <div><dt>Roll</dt><dd id="rollValue">0.0°</dd></div>
+          <div><dt>Pitch</dt><dd id="pitchValue">0.0°</dd></div>
+          <div><dt>Yaw</dt><dd id="yawValue">0.0°</dd></div>
+          <div><dt>Velocity</dt><dd id="velocityValue">0.000 m/s</dd></div>
+          <div><dt>Confidence</dt><dd id="confidenceValue">HIGH</dd></div>
+        </dl>
+        <div class="button-row">
+          <button id="resetOrigin" class="secondary">Reset origin</button>
+          <button id="clearTrail" class="secondary">Clear trail</button>
+        </div>
+      </section>
+
+      <section id="d400Controls" hidden>
+        <h2>Depth</h2>
+        <label class="field-label" for="depthRange">Display range <span id="depthRangeLabel">4.0 m</span></label>
+        <input id="depthRange" type="range" min="1" max="10" step="0.1" value="4" />
+        <dl class="readout-list compact">
+          <div><dt>Probe X</dt><dd id="probeX">—</dd></div>
+          <div><dt>Probe Y</dt><dd id="probeY">—</dd></div>
+          <div><dt>Depth</dt><dd id="probeDepth">—</dd></div>
+        </dl>
+      </section>
+
+      <section id="liveControls" hidden>
+        <h2>Live bridge</h2>
+        <label class="field-label" for="bridgeUrl">WebSocket endpoint</label>
+        <input id="bridgeUrl" class="text-input" type="text" value="ws://127.0.0.1:8765" spellcheck="false" />
+        <button id="connectBridge" class="primary full-width">Connect</button>
+        <p id="bridgeHint" class="hint">The native bridge is not part of v0.1 yet. This frontend already accepts the documented pose/depth messages.</p>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div class="card viewer-card">
+        <div class="viewer-header">
+          <div>
+            <span id="viewerTitle">T265 · 6DoF trajectory</span>
+            <span id="viewerSubtitle" class="muted">drag to orbit · wheel to zoom</span>
+          </div>
+          <button id="pauseButton" class="secondary small">Pause</button>
+        </div>
+        <div class="canvas-shell">
+          <canvas id="viewerCanvas"></canvas>
+          <div id="canvasOverlay" class="canvas-overlay">
+            <span class="dot live-dot"></span>
+            <span id="overlayText">Simulated tracking stream</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card status-card">
+        <div>
+          <span class="status-label">Mode</span>
+          <strong id="statusMode">T265 DEMO</strong>
+        </div>
+        <div>
+          <span class="status-label">Frames</span>
+          <strong id="frameCount">0</strong>
+        </div>
+        <div>
+          <span class="status-label">Transport</span>
+          <strong id="transportValue">INTERNAL</strong>
+        </div>
+        <div>
+          <span class="status-label">Viewer</span>
+          <strong>v0.1</strong>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    RealSense Web Viewer · static GitHub Pages frontend · T265 + D400 architecture
+  </footer>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
