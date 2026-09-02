@@ -24,6 +24,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate JavaScript syntax
+        run: |
+          node --check src/main.js
+          node --check src/browser-depth.js
+          node --check src/browser-pointcloud.js
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
