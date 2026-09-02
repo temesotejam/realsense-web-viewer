@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>RealSense WebUSB Probe</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0f14; color: #e6edf3; min-height: 100vh; }
+    header { padding: 24px clamp(16px,4vw,48px); border-bottom: 1px solid #28313c; display:flex; gap:16px; align-items:center; justify-content:space-between; }
+    h1 { margin: 4px 0 0; font-size: clamp(24px,4vw,38px); }
+    .eyebrow { color:#8b949e; letter-spacing:.14em; font-size:12px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; display:grid; gap:16px; }
+    .card { background:#111820; border:1px solid #28313c; border-radius:14px; padding:18px; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
+    button, a.button { appearance:none; border:1px solid #3a4654; background:#18212b; color:#e6edf3; border-radius:9px; padding:10px 14px; font-weight:650; cursor:pointer; text-decoration:none; }
+    button.primary { background:#238636; border-color:#2ea043; }
+    button:hover, a.button:hover { filter:brightness(1.12); }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .status { display:inline-flex; align-items:center; gap:8px; border:1px solid #3a4654; border-radius:999px; padding:7px 11px; font-size:13px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#8b949e; }
+    .ok .dot { background:#3fb950; }
+    .bad .dot { background:#f85149; }
+    .warn { color:#d29922; }
+    .muted { color:#8b949e; }
+    code { background:#0d1117; padding:2px 5px; border-radius:5px; }
+    pre { margin:0; background:#090d12; border:1px solid #28313c; border-radius:10px; padding:14px; min-height:280px; max-height:58vh; overflow:auto; white-space:pre-wrap; word-break:break-word; font:12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; border-bottom:1px solid #28313c; padding:9px 7px; vertical-align:top; }
+    th { color:#8b949e; font-weight:600; }
+    .result-pass { color:#3fb950; font-weight:700; }
+    .result-fail { color:#f85149; font-weight:700; }
+    .result-protected { color:#d29922; font-weight:700; }
+    .note { line-height:1.6; }
+    .grid { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:16px; }
+    @media (max-width:800px) { .grid { grid-template-columns:1fr; } header { align-items:flex-start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="eyebrow">REALSENSE · DIRECT BROWSER EXPERIMENT</div>
+    <h1>WebUSB Probe</h1>
+  </div>
+  <div id="apiStatus" class="status"><span class="dot"></span><span>Checking WebUSB…</span></div>
+</header>
+
+<main>
+  <section class="card note">
+    <strong>Purpose:</strong> test whether a RealSense camera exposes any USB interface that Chrome/Edge can claim directly from GitHub Pages.
+    This page sends <strong>no camera commands</strong> and performs <strong>no firmware writes</strong>. It only requests permission, reads USB descriptors, and briefly attempts to claim/release each interface.
+    <div class="actions">
+      <button id="chooseBtn" class="primary">Choose RealSense USB device</button>
+      <button id="knownBtn">Inspect already permitted devices</button>
+      <button id="copyBtn">Copy report</button>
+      <button id="clearBtn">Clear</button>
+      <a class="button" href="./">Back to Viewer</a>
+    </div>
+    <div class="muted">Recommended: desktop Chrome or Edge over HTTPS. RealSense vendor filters include 0x8086, 0x8087 and 0x03E7.</div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Interface results</h2>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>#</th><th>Class</th><th>Alt.</th><th>Endpoints</th><th>Claim</th></tr></thead>
+          <tbody id="interfaceBody"><tr><td colspan="5" class="muted">No device inspected yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card note">
+      <h2>How to read the result</h2>
+      <p><span class="result-pass">CLAIMED</span> on a vendor-specific interface is the interesting result: a bridge-free T265 path may be possible.</p>
+      <p><span class="result-protected">PROTECTED</span> is expected for USB Video (0x0E) and HID (0x03) interfaces because Chromium deliberately blocks normal WebUSB pages from claiming those classes.</p>
+      <p><span class="result-fail">FAILED</span> can mean the operating-system driver owns that interface, the device cannot be opened through WebUSB, or another USB access restriction applies.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Diagnostic report</h2>
+    <pre id="log">Ready. Connect the T265 or D400-series camera, then press “Choose RealSense USB device”.</pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  const chooseBtn = document.getElementById('chooseBtn');
+  const knownBtn = document.getElementById('knownBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const logEl = document.getElementById('log');
+  const body = document.getElementById('interfaceBody');
+  const status = document.getElementById('apiStatus');
+
+  const VENDORS = [0x8086, 0x8087, 0x03e7];
+  const protectedClasses = new Set([0x01,0x03,0x08,0x0b,0x0e,0x10,0xe0]);
+  const classNames = {
+    0x00:'Per-interface', 0x01:'Audio', 0x02:'Communications', 0x03:'HID',
+    0x08:'Mass Storage', 0x09:'Hub', 0x0a:'CDC Data', 0x0b:'Smart Card',
+    0x0e:'Video (UVC)', 0x10:'Audio/Video', 0xdc:'Diagnostic',
+    0xe0:'Wireless', 0xef:'Miscellaneous', 0xfe:'Application Specific', 0xff:'Vendor Specific'
+  };
+
+  let report = '';
+  function hex(n, width=4) { return '0x' + Number(n ?? 0).toString(16).toUpperCase().padStart(width,'0'); }
+  function clsName(n) { return `${classNames[n] || 'Unknown'} (${hex(n,2)})`; }
+  function stamp() { return new Date().toISOString(); }
+  function resetReport(message='') { report = message ? message + '\n' : ''; logEl.textContent = report || ' '; }
+  function log(line='') { report += line + '\n'; logEl.textContent = report; logEl.scrollTop = logEl.scrollHeight; }
+  function setStatus(kind, text) { status.className = `status ${kind || ''}`; status.innerHTML = `<span class="dot"></span><span>${text}</span>`; }
+
+  function endpointText(alt) {
+    if (!alt.endpoints?.length) return '—';
+    return alt.endpoints.map(ep => `${ep.direction} ${ep.type} #${ep.endpointNumber} ${ep.packetSize || ''}`.trim()).join(', ');
+  }
+
+  function addRow(num, alt, result, detail='') {
+    if (body.dataset.started !== '1') { body.innerHTML=''; body.dataset.started='1'; }
+    const tr = document.createElement('tr');
+    const resultClass = result === 'CLAIMED' ? 'result-pass' : result === 'PROTECTED' ? 'result-protected' : 'result-fail';
+    tr.innerHTML = `<td>${num}</td><td>${clsName(alt.interfaceClass)}</td><td>${alt.alternateSetting}</td><td>${endpointText(alt)}</td><td><span class="${resultClass}">${result}</span>${detail ? `<div class="muted">${escapeHtml(detail)}</div>`:''}</td>`;
+    body.appendChild(tr);
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function inspect(device) {
+    body.innerHTML=''; body.dataset.started='1';
+    resetReport();
+    log(`[${stamp()}] RealSense WebUSB Probe`);
+    log(`Browser: ${navigator.userAgent}`);
+    log(`Secure context: ${window.isSecureContext}`);
+    log(`Product: ${device.productName || '(not exposed)'}`);
+    log(`Manufacturer: ${device.manufacturerName || '(not exposed)'}`);
+    log(`Serial: ${device.serialNumber || '(not exposed)'}`);
+    log(`VID:PID = ${hex(device.vendorId)}:${hex(device.productId)}`);
+    log(`USB version: ${device.usbVersionMajor}.${device.usbVersionMinor}.${device.usbVersionSubminor}`);
+    log(`Device class/subclass/protocol: ${hex(device.deviceClass,2)} / ${hex(device.deviceSubclass,2)} / ${hex(device.deviceProtocol,2)}`);
+    log(`Configurations exposed: ${device.configurations?.length ?? 0}`);
+    log('');
+
+    for (const cfg of device.configurations || []) {
+      log(`Configuration ${cfg.configurationValue}: ${cfg.configurationName || '(unnamed)'}`);
+      for (const intf of cfg.interfaces || []) {
+        for (const alt of intf.alternates || []) {
+          log(`  IF ${intf.interfaceNumber}, alt ${alt.alternateSetting}: ${clsName(alt.interfaceClass)} subclass=${hex(alt.interfaceSubclass,2)} protocol=${hex(alt.interfaceProtocol,2)}`);
+          for (const ep of alt.endpoints || []) log(`    EP ${ep.endpointNumber}: ${ep.direction} ${ep.type}, packetSize=${ep.packetSize}`);
+        }
+      }
+    }
+
+    log('');
+    try {
+      if (!device.opened) {
+        log('Opening device…');
+        await device.open();
+        log('OPEN: success');
+      }
+      if (!device.configuration) {
+        const cfgValue = device.configurations?.[0]?.configurationValue || 1;
+        log(`Selecting configuration ${cfgValue}…`);
+        await device.selectConfiguration(cfgValue);
+        log('SELECT CONFIGURATION: success');
+      }
+    } catch (err) {
+      log(`OPEN/CONFIGURE: FAILED — ${err.name}: ${err.message}`);
+      log('No interface claim test could be performed. This is still a useful result.');
+      setStatus('bad', 'Device open blocked');
+      return;
+    }
+
+    const interfaces = device.configuration?.interfaces || [];
+    log('');
+    log(`Claim test: ${interfaces.length} interface(s)`);
+    let claimable = 0;
+    for (const intf of interfaces) {
+      const alt = intf.alternate;
+      const protectedByClass = [...intf.alternates].some(a => protectedClasses.has(a.interfaceClass));
+      try {
+        await device.claimInterface(intf.interfaceNumber);
+        claimable++;
+        addRow(intf.interfaceNumber, alt, 'CLAIMED', protectedByClass ? 'Unexpected: class normally protected' : 'Direct WebUSB access available');
+        log(`IF ${intf.interfaceNumber}: CLAIMED (${clsName(alt.interfaceClass)})`);
+        await device.releaseInterface(intf.interfaceNumber);
+        log(`IF ${intf.interfaceNumber}: released`);
+      } catch (err) {
+        const isProtected = err.name === 'SecurityError' || /protected/i.test(err.message || '');
+        addRow(intf.interfaceNumber, alt, isProtected ? 'PROTECTED' : 'FAILED', `${err.name}: ${err.message}`);
+        log(`IF ${intf.interfaceNumber}: ${isProtected ? 'PROTECTED' : 'FAILED'} — ${err.name}: ${err.message}`);
+      }
+    }
+
+    try { await device.close(); log(''); log('Device closed.'); } catch (_) {}
+    log('');
+    if (claimable > 0) {
+      log(`RESULT: ${claimable} interface(s) are claimable from a normal web page.`);
+      log('NEXT: inspect the claimable endpoint/protocol and compare it with librealsense T265 USB traffic.');
+      setStatus('ok', `${claimable} interface(s) claimable`);
+    } else {
+      log('RESULT: no interfaces were claimable by this WebUSB page.');
+      log('A normal GitHub Pages page cannot directly reproduce librealsense through WebUSB on this device/driver configuration.');
+      setStatus('bad', 'No claimable interface');
+    }
+  }
+
+  chooseBtn.addEventListener('click', async () => {
+    if (!navigator.usb) return;
+    try {
+      const device = await navigator.usb.requestDevice({ filters: VENDORS.map(vendorId => ({ vendorId })) });
+      await inspect(device);
+    } catch (err) {
+      if (err.name === 'NotFoundError') return;
+      resetReport(`[${stamp()}] requestDevice failed: ${err.name}: ${err.message}`);
+      setStatus('bad', 'USB request failed');
+    }
+  });
+
+  knownBtn.addEventListener('click', async () => {
+    if (!navigator.usb) return;
+    const devices = await navigator.usb.getDevices();
+    const rs = devices.filter(d => VENDORS.includes(d.vendorId));
+    if (!rs.length) {
+      resetReport(`[${stamp()}] No previously permitted RealSense/Intel-Movidius WebUSB device was found.`);
+      return;
+    }
+    await inspect(rs[0]);
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(report); copyBtn.textContent='Copied'; setTimeout(()=>copyBtn.textContent='Copy report',1000); }
+    catch { copyBtn.textContent='Copy failed'; setTimeout(()=>copyBtn.textContent='Copy report',1000); }
+  });
+  clearBtn.addEventListener('click', () => { body.innerHTML='<tr><td colspan="5" class="muted">No device inspected yet.</td></tr>'; body.dataset.started='0'; resetReport('Ready.'); setStatus('', 'WebUSB ready'); });
+
+  if ('usb' in navigator) {
+    setStatus('ok','WebUSB available');
+    navigator.usb.addEventListener('connect', e => log(`[${stamp()}] USB connected: ${e.device.productName || hex(e.device.vendorId)+':'+hex(e.device.productId)}`));
+    navigator.usb.addEventListener('disconnect', e => log(`[${stamp()}] USB disconnected: ${e.device.productName || hex(e.device.vendorId)+':'+hex(e.device.productId)}`));
+  } else {
+    setStatus('bad','WebUSB unavailable');
+    chooseBtn.disabled = true; knownBtn.disabled = true;
+    resetReport('WebUSB is not available in this browser. Use a current desktop Chromium-based browser such as Chrome or Edge.');
+  }
+})();
+</script>
+</body>
+</html>
