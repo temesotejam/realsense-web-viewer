@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>T265 WebUSB Boot Lab</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b0f14; color: #e6edf3; }
+    header { padding: 24px clamp(16px,4vw,48px); border-bottom: 1px solid #28313c; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    h1 { margin: 4px 0 0; font-size: clamp(24px,4vw,38px); }
+    h2 { margin-top: 0; }
+    .eyebrow { color:#8b949e; letter-spacing:.14em; font-size:12px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; display:grid; gap:16px; }
+    .card { background:#111820; border:1px solid #28313c; border-radius:14px; padding:18px; }
+    .grid { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:16px; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0; }
+    button, a.button, input::file-selector-button { appearance:none; border:1px solid #3a4654; background:#18212b; color:#e6edf3; border-radius:9px; padding:10px 14px; font-weight:650; cursor:pointer; text-decoration:none; }
+    button.primary { background:#238636; border-color:#2ea043; }
+    button.danger { background:#6e2f2f; border-color:#9d4646; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    input[type=file] { width:100%; border:1px solid #3a4654; border-radius:9px; padding:8px; background:#0d1117; color:#c9d1d9; }
+    .status { display:inline-flex; align-items:center; gap:8px; border:1px solid #3a4654; border-radius:999px; padding:7px 11px; font-size:13px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#8b949e; }
+    .ok .dot { background:#3fb950; }
+    .bad .dot { background:#f85149; }
+    .warn .dot { background:#d29922; }
+    .muted { color:#8b949e; }
+    .good { color:#3fb950; }
+    .warning { color:#d29922; }
+    code { background:#0d1117; padding:2px 5px; border-radius:5px; }
+    pre { margin:0; background:#090d12; border:1px solid #28313c; border-radius:10px; padding:14px; min-height:300px; max-height:58vh; overflow:auto; white-space:pre-wrap; word-break:break-word; font:12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    dl { display:grid; gap:8px; }
+    dl div { display:flex; justify-content:space-between; gap:16px; border-bottom:1px solid #202a35; padding-bottom:7px; }
+    dt { color:#8b949e; }
+    dd { margin:0; text-align:right; font-family:ui-monospace,monospace; }
+    .note { line-height:1.6; }
+    .step { border-left:3px solid #303b47; padding-left:12px; }
+    @media(max-width:780px){ .grid{grid-template-columns:1fr} header{align-items:flex-start; flex-direction:column} }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="eyebrow">REALSENSE T265 · DIRECT BROWSER EXPERIMENT</div>
+    <h1>T265 WebUSB Boot Lab</h1>
+  </div>
+  <div id="apiStatus" class="status"><span class="dot"></span><span>Checking WebUSB…</span></div>
+</header>
+<main>
+  <section class="card note">
+    <strong>Goal:</strong> reproduce the first stage of librealsense's T265 startup in the browser.
+    The boot device is <code>03E7:2150</code>. librealsense opens USB interface 0 and sends the complete T265 VPU boot image to its first Bulk OUT endpoint. A successful boot should disconnect the Movidius device and re-enumerate the T265 runtime device, normally as <code>8087:0B37</code> (with <code>8087:0AF3</code> also recognized by librealsense rules).
+    <p class="warning"><strong>Experimental:</strong> use only a genuine T265 boot image (<code>target-*.mvcmd</code>). This page does not bundle or auto-download Intel firmware.</p>
+    <div class="actions"><a class="button" href="./">Back to Viewer</a><a class="button" href="./webusb-probe.html">Generic WebUSB Probe</a></div>
+  </section>
+
+  <div class="grid">
+    <section class="card step">
+      <h2>1 · Boot device</h2>
+      <div class="actions">
+        <button id="chooseBoot" class="primary">Choose 03E7:2150</button>
+        <button id="usePermittedBoot">Use permitted boot device</button>
+      </div>
+      <dl>
+        <div><dt>Device</dt><dd id="bootDevice">—</dd></div>
+        <div><dt>Interface</dt><dd id="bootInterface">—</dd></div>
+        <div><dt>Bulk OUT</dt><dd id="bootEndpoint">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card step">
+      <h2>2 · Boot image</h2>
+      <input id="firmwareFile" type="file" accept=".mvcmd,.bin,.fw,application/octet-stream" />
+      <dl>
+        <div><dt>Name</dt><dd id="firmwareName">—</dd></div>
+        <div><dt>Size</dt><dd id="firmwareSize">—</dd></div>
+        <div><dt>SHA-256</dt><dd id="firmwareHash">—</dd></div>
+      </dl>
+      <div class="actions"><button id="bootButton" class="danger" disabled>Send boot image</button></div>
+    </section>
+
+    <section class="card step">
+      <h2>3 · Runtime re-enumeration</h2>
+      <p class="muted">After the boot transfer, Chrome may treat the runtime VID/PID as a new permission target. If automatic detection does not find it, press the authorize button.</p>
+      <div class="actions">
+        <button id="findRuntime">Find permitted runtime</button>
+        <button id="chooseRuntime" class="primary">Authorize runtime T265</button>
+      </div>
+      <dl>
+        <div><dt>Runtime</dt><dd id="runtimeDevice">—</dd></div>
+        <div><dt>Claimable vendor IF</dt><dd id="runtimeClaim">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card step">
+      <h2>4 · Result</h2>
+      <p id="resultText" class="muted">Waiting for a boot device.</p>
+      <div class="actions"><button id="copyLog">Copy log</button><button id="clearLog">Clear log</button></div>
+      <p class="muted">This phase intentionally stops before sending T265 runtime commands. Once the runtime vendor interface/endpoints are confirmed, the pose protocol can be implemented against the same WebUSB transport.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Diagnostic log</h2>
+    <pre id="log">Ready.</pre>
+  </section>
+</main>
+<script type="module" src="src/t265-webusb.js"></script>
+</body>
+</html>
