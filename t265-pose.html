@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>T265 WebUSB Pose Lab</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:#0b0f14; color:#e6edf3; }
+    header { padding:24px clamp(16px,4vw,48px); border-bottom:1px solid #28313c; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    h1 { margin:4px 0 0; font-size:clamp(24px,4vw,38px); }
+    h2 { margin-top:0; }
+    .eyebrow { color:#8b949e; letter-spacing:.14em; font-size:12px; }
+    main { max-width:1120px; margin:0 auto; padding:24px 16px 48px; display:grid; gap:16px; }
+    .card { background:#111820; border:1px solid #28313c; border-radius:14px; padding:18px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
+    button, a.button { appearance:none; border:1px solid #3a4654; background:#18212b; color:#e6edf3; border-radius:9px; padding:10px 14px; font-weight:650; cursor:pointer; text-decoration:none; }
+    button.primary { background:#238636; border-color:#2ea043; }
+    button.danger { background:#6e2f2f; border-color:#9d4646; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .status { display:inline-flex; align-items:center; gap:8px; border:1px solid #3a4654; border-radius:999px; padding:7px 11px; font-size:13px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#8b949e; }
+    .ok .dot { background:#3fb950; }
+    .bad .dot { background:#f85149; }
+    .warn .dot { background:#d29922; }
+    .muted { color:#8b949e; }
+    .good { color:#3fb950; }
+    .warning { color:#d29922; }
+    code { background:#0d1117; padding:2px 5px; border-radius:5px; }
+    dl { display:grid; gap:8px; margin-bottom:0; }
+    dl div { display:flex; justify-content:space-between; gap:16px; border-bottom:1px solid #202a35; padding-bottom:7px; }
+    dt { color:#8b949e; }
+    dd { margin:0; text-align:right; font-family:ui-monospace,monospace; }
+    .pose-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .pose-value { background:#0d1117; border:1px solid #28313c; border-radius:10px; padding:12px; }
+    .pose-value small { display:block; color:#8b949e; margin-bottom:5px; }
+    .pose-value strong { font:600 17px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    pre { margin:0; background:#090d12; border:1px solid #28313c; border-radius:10px; padding:14px; min-height:300px; max-height:58vh; overflow:auto; white-space:pre-wrap; word-break:break-word; font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .note { line-height:1.6; }
+    @media(max-width:780px){ .grid{grid-template-columns:1fr} .pose-grid{grid-template-columns:repeat(2,minmax(0,1fr))} header{align-items:flex-start; flex-direction:column} }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="eyebrow">REALSENSE T265 · RUNTIME USB PROTOCOL</div>
+    <h1>T265 WebUSB Pose Lab</h1>
+  </div>
+  <div id="apiStatus" class="status"><span class="dot"></span><span>Checking WebUSB…</span></div>
+</header>
+<main>
+  <section class="card note">
+    <strong>Goal:</strong> talk directly to the booted T265 runtime (<code>8087:0B37</code>) using the same TM2 vendor protocol used by librealsense. Commands use Bulk OUT/IN endpoint <code>#2</code>; low-latency pose arrives on Interrupt IN endpoint <code>#3</code>.
+    <p class="warning"><strong>Experimental:</strong> this page only sends runtime configuration/start/stop commands documented in the T265-compatible librealsense source. It does not write EEPROM or calibration.</p>
+    <div class="actions"><a class="button" href="./t265-webusb.html">Boot Lab</a><a class="button" href="./">Back to Viewer</a></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1 · Runtime connection</h2>
+      <div class="actions">
+        <button id="authorizeRuntime" class="primary">Authorize 8087:0B37</button>
+        <button id="usePermittedRuntime">Use permitted runtime</button>
+        <button id="closeRuntime">Close runtime</button>
+      </div>
+      <dl>
+        <div><dt>Device</dt><dd id="runtimeDevice">—</dd></div>
+        <div><dt>Interface</dt><dd id="runtimeInterface">—</dd></div>
+        <div><dt>Command endpoints</dt><dd id="commandEndpoints">—</dd></div>
+        <div><dt>Pose endpoint</dt><dd id="poseEndpoint">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>2 · Runtime probe</h2>
+      <p class="muted">Reads device info, device time, and supported raw streams before any tracking start.</p>
+      <div class="actions"><button id="probeRuntime" disabled>Probe runtime</button></div>
+      <dl>
+        <div><dt>Firmware</dt><dd id="firmwareVersion">—</dd></div>
+        <div><dt>Device time</dt><dd id="deviceTime">—</dd></div>
+        <div><dt>Raw streams</dt><dd id="rawStreams">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>3 · Live 6DoF</h2>
+      <p class="muted">Pose-only mode keeps fisheye/IMU data internal to the T265. Interrupt rate is initially set to 30 Hz for this diagnostic.</p>
+      <div class="actions">
+        <button id="startPose" class="primary" disabled>Start pose</button>
+        <button id="stopPose" class="danger" disabled>Stop pose</button>
+      </div>
+      <dl>
+        <div><dt>Frames</dt><dd id="poseFrames">0</dd></div>
+        <div><dt>Measured rate</dt><dd id="poseRate">—</dd></div>
+        <div><dt>Packet length</dt><dd id="posePacketLength">—</dd></div>
+        <div><dt>Tracker / mapper</dt><dd id="poseConfidence">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Pose values</h2>
+      <div class="pose-grid">
+        <div class="pose-value"><small>X</small><strong id="poseX">—</strong></div>
+        <div class="pose-value"><small>Y</small><strong id="poseY">—</strong></div>
+        <div class="pose-value"><small>Z</small><strong id="poseZ">—</strong></div>
+        <div class="pose-value"><small>Roll</small><strong id="poseRoll">—</strong></div>
+        <div class="pose-value"><small>Pitch</small><strong id="posePitch">—</strong></div>
+        <div class="pose-value"><small>Yaw</small><strong id="poseYaw">—</strong></div>
+        <div class="pose-value"><small>Speed</small><strong id="poseSpeed">—</strong></div>
+        <div class="pose-value"><small>Device timestamp</small><strong id="poseTimestamp">—</strong></div>
+        <div class="pose-value"><small>Tracker state</small><strong id="poseTrackerState">—</strong></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="actions"><button id="copyLog">Copy log</button><button id="clearLog">Clear log</button></div>
+    <h2>Runtime diagnostic log</h2>
+    <pre id="log">Ready.</pre>
+  </section>
+</main>
+<script type="module" src="src/t265-pose.js"></script>
+</body>
+</html>

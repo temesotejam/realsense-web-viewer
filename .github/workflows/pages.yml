@@ -30,6 +30,7 @@ jobs:
           node --check src/browser-depth.js
           node --check src/browser-pointcloud.js
           node --check src/t265-webusb.js
+          node --check src/t265-pose.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
