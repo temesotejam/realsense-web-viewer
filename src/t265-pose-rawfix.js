@@ -85,11 +85,24 @@
         const bytes = asBytes(data);
         const result = bytes && selectLibrealsenseProfiles(bytes);
         if (result && result.count !== result.selected.length) {
+          const logicalLength = bytes.byteLength;
           const summary = result.selected.map(describe).join(", ");
-          const line = `[RAWFIX] DEV_RAW_STREAMS_CONTROL ${result.count} -> ${result.selected.length}: ${summary}`;
+          const line = `[RAWFIX] DEV_RAW_STREAMS_CONTROL ${result.count} -> ${result.selected.length}: ${summary}; USB ${logicalLength} -> ${result.fixed.byteLength} B`;
           console.info(line);
           appendLog(line);
-          return originalTransferOut.call(this, endpointNumber, result.fixed);
+          return originalTransferOut.call(this, endpointNumber, result.fixed).then((transferResult) => {
+            // The upper layer built the original 15-profile packet and validates
+            // bytesWritten against that logical request size. Since this shim
+            // intentionally replaces that packet with the equivalent 4-profile
+            // librealsense request, report the logical write size only after the
+            // complete physical replacement packet was accepted by WebUSB.
+            if (transferResult?.status === "ok" &&
+                Number.isFinite(transferResult.bytesWritten) &&
+                transferResult.bytesWritten === result.fixed.byteLength) {
+              return { status: transferResult.status, bytesWritten: logicalLength };
+            }
+            return transferResult;
+          });
         }
       }
     } catch (error) {
