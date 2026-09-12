@@ -1,12 +1,15 @@
 (() => {
   const USBDeviceCtor = globalThis.USBDevice;
-  if (!USBDeviceCtor?.prototype?.transferOut) return;
+  if (!USBDeviceCtor?.prototype?.transferOut || !USBDeviceCtor?.prototype?.transferIn) return;
 
   const originalTransferOut = USBDeviceCtor.prototype.transferOut;
+  const originalTransferIn = USBDeviceCtor.prototype.transferIn;
   const DEV_RAW_STREAMS_CONTROL = 0x0005;
+  const SLAM_SET_6DOF_INTERRUPT_RATE = 0x1005;
   const COMMAND_ENDPOINT = 2;
   const ENTRY_SIZE = 12;
   const HEADER_SIZE = 8; // 6-byte request header + uint16 stream count
+  const pendingSyntheticRateResponse = new WeakSet();
 
   function asBytes(data) {
     if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -83,6 +86,19 @@
     try {
       if (endpointNumber === COMMAND_ENDPOINT) {
         const bytes = asBytes(data);
+        if (bytes?.byteLength >= 6) {
+          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+          const messageId = view.getUint16(4, true);
+
+          if (messageId === SLAM_SET_6DOF_INTERRUPT_RATE) {
+            pendingSyntheticRateResponse.add(this);
+            const line = "[FW0951] Skipping unsupported SLAM_SET_6DOF_INTERRUPT_RATE (0x1005); using firmware default interrupt rate.";
+            console.info(line);
+            appendLog(line);
+            return Promise.resolve({ status: "ok", bytesWritten: bytes.byteLength });
+          }
+        }
+
         const result = bytes && selectLibrealsenseProfiles(bytes);
         if (result && result.count !== result.selected.length) {
           const logicalLength = bytes.byteLength;
@@ -91,11 +107,6 @@
           console.info(line);
           appendLog(line);
           return originalTransferOut.call(this, endpointNumber, result.fixed).then((transferResult) => {
-            // The upper layer built the original 15-profile packet and validates
-            // bytesWritten against that logical request size. Since this shim
-            // intentionally replaces that packet with the equivalent 4-profile
-            // librealsense request, report the logical write size only after the
-            // complete physical replacement packet was accepted by WebUSB.
             if (transferResult?.status === "ok" &&
                 Number.isFinite(transferResult.bytesWritten) &&
                 transferResult.bytesWritten === result.fixed.byteLength) {
@@ -106,8 +117,21 @@
         }
       }
     } catch (error) {
-      console.warn("T265 raw-stream compatibility patch failed; sending original packet.", error);
+      console.warn("T265 compatibility patch failed; sending original packet.", error);
     }
     return originalTransferOut.call(this, endpointNumber, data);
+  };
+
+  USBDeviceCtor.prototype.transferIn = function patchedTransferIn(endpointNumber, length) {
+    if (endpointNumber === COMMAND_ENDPOINT && pendingSyntheticRateResponse.has(this)) {
+      pendingSyntheticRateResponse.delete(this);
+      const buffer = new ArrayBuffer(8);
+      const view = new DataView(buffer);
+      view.setUint32(0, 8, true);
+      view.setUint16(4, SLAM_SET_6DOF_INTERRUPT_RATE, true);
+      view.setUint16(6, 0, true); // SUCCESS: the command itself was intentionally omitted.
+      return Promise.resolve({ status: "ok", data: view });
+    }
+    return originalTransferIn.call(this, endpointNumber, length);
   };
 })();
