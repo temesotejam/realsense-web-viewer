@@ -46,12 +46,40 @@ The default depth scale is currently `0.001 m / Z16 unit`, matching the historic
 
 The T265 initially enumerates as a Movidius boot device (`03E7:2150`). Physical testing confirmed that Chrome can open it and claim its vendor-specific interface through WebUSB. This is promising because the interface is not one of Chromium's protected UVC/HID classes.
 
+The browser boot experiment now mirrors the boot step used by librealsense:
+
+```text
+03E7:2150 Movidius boot device
+        |
+        | WebUSB · interface 0 · first Bulk OUT endpoint
+        | complete target-*.mvcmd boot image
+        v
+USB disconnect / re-enumeration
+        |
+        v
+8087:0B37 T265 runtime
+(8087:0AF3 is also recognized as a T265-family runtime ID)
+```
+
+Open `t265-webusb.html` to run the experiment. It can:
+
+- request only the `03E7:2150` boot device
+- locate interface 0 and its Bulk OUT endpoint
+- load a user-supplied `target-*.mvcmd` image without bundling proprietary firmware
+- calculate and log the selected image SHA-256
+- send the complete boot image with one WebUSB `transferOut()` operation
+- wait for an already-permitted `8087:0B37` / `8087:0AF3` runtime device
+- explicitly request runtime permission when Chrome treats the re-enumerated device as a new permission target
+- enumerate runtime interfaces/endpoints and test claimability of vendor-specific interfaces
+
+The transport code is implemented, but the boot/re-enumeration path still needs a physical T265 test before it should be considered verified. Runtime commands and pose decoding are intentionally not sent yet.
+
 The next T265 browser-only milestones are:
 
-1. Load the official T265 boot image through the claimable bulk interface.
-2. Observe re-enumeration to the runtime T265 device.
-3. Claim the runtime vendor interface through WebUSB.
-4. Implement the T265 runtime pose protocol in JavaScript.
+1. Physically verify the browser boot transfer with a genuine T265 boot image.
+2. Confirm re-enumeration and the exact claimable runtime interface/endpoints.
+3. Implement the T265 runtime message transport in JavaScript.
+4. Decode live pose packets and validate them against `pyrealsense2`.
 5. Feed live 6DoF pose into the existing trajectory viewer.
 
 The native T265 bridge remains available as a fallback and as a reference implementation while the browser-only transport is developed.
@@ -105,6 +133,7 @@ See [`bridge/README.md`](bridge/README.md) and [`docs/BRIDGE_PROTOCOL.md`](docs/
 
 The repository includes small experiments used to verify what the browser actually receives:
 
+- `t265-webusb.html` — T265 boot-image transfer, runtime re-enumeration and vendor-interface diagnostics
 - `webusb-probe.html` — USB descriptors and interface claimability
 - `uvc-probe.html` — manual `getUserMedia()` stream inspection
 - `uvc-scan.html` — automatic RealSense RGB/Depth input scan
@@ -143,8 +172,10 @@ The repository is deployed as a static GitHub Pages site with `.github/workflows
 
 - [x] Movidius boot device discovered through WebUSB
 - [x] Vendor-specific interface claim test
-- [ ] Browser T265 boot-image transfer
-- [ ] Runtime device re-enumeration
+- [x] Browser boot transport implemented from librealsense behavior
+- [x] Runtime VID/PID permission + interface diagnostic implemented
+- [ ] Physical browser boot-image transfer confirmation
+- [ ] Runtime device re-enumeration confirmation
 - [ ] Runtime USB protocol
 - [ ] Live 6DoF pose
 - [ ] Fisheye / IMU where practical
