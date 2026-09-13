@@ -34,6 +34,7 @@ jobs:
           node --check src/t265-pose-rawfix.js
           node --check src/t265-pose.js
           node --check src/t265-direct.js
+          node --check src/t265-autoboot-relay.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
