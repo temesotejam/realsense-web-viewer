@@ -2,7 +2,7 @@
 
 Browser-based visualization for Intel RealSense depth and tracking cameras. The project is intentionally **browser-first**: use standard browser camera/USB APIs where they preserve the RealSense data, and keep a native `librealsense` bridge only as a fallback/reference path.
 
-> Status: experimental v0.4 — direct D400 depth and the complete T265 browser-only boot → runtime → live 6DoF → 3D viewer path are physically verified in desktop Chromium.
+> Status: experimental v0.4 — direct D400 depth and the complete T265 browser-only boot → Intel official firmware relay → runtime → live 6DoF → 3D viewer path are physically verified in desktop Chromium.
 
 ## Current status at a glance
 
@@ -28,8 +28,10 @@ Connect T265 WebUSB
         |
         +-- 03E7:2150 boot device
                 |
-                | download known 0.2.0.951 image
-                | verify exact size + SHA-256
+                | fetch known 0.2.0.951 image
+                |   primary: Intel official CDN via Cloudflare relay
+                |   fallback: commit-pinned GitHub Raw mirror
+                | verify exact size + SHA-256 in the browser
                 | WebUSB IF0 / Bulk OUT boot transfer
                 v
           8087:0B37 runtime
@@ -46,6 +48,93 @@ Connect T265 WebUSB
 ```
 
 This complete flow has been physically verified with a T265 running firmware `0.2.0.951`.
+
+## 2026-09-13 physical verification
+
+The current **primary** T265 path was physically verified end to end on 2026-09-13.
+
+### Browser-side Intel relay diagnostic
+
+The Boot Lab diagnostic was run from the deployed GitHub Pages origin:
+
+```text
+Page origin:
+https://temesotejam.github.io
+
+Relay URL:
+https://t265-intel-firmware-relay.temesotejam-t265.workers.dev/t265/0.2.0.951.mvcmd
+```
+
+The browser observed:
+
+```text
+HTTP status:        200
+Content-Type:       application/octet-stream
+Content-Length:     9323648
+Firmware source:    Intel RealSense official CDN
+Downloaded:         9,323,648 B
+Elapsed:            2913.6 ms
+Size check:         OK
+SHA-256 check:      OK
+```
+
+The computed browser-side SHA-256 was:
+
+```text
+0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0
+```
+
+and exactly matched the expected Intel image hash.
+
+That diagnostic intentionally performed **no WebUSB transfer**. It verified only:
+
+```text
+GitHub Pages browser
+        |
+        v
+Cloudflare Worker relay
+        |
+        v
+Intel / RealSense official firmware source
+        |
+        v
+browser RAM
+        |
+        +--> exact byte-size verification
+        +--> SHA-256 verification
+        +--> discard after diagnostic
+```
+
+### Main-viewer physical verification
+
+After the retrieval-only diagnostic passed, the same official-relay path was tested from the normal main viewer with a physical T265:
+
+```text
+Connect T265 WebUSB
+        |
+        v
+03E7:2150 boot device
+        |
+        | fetch firmware through Intel official relay
+        | verify 9,323,648 B
+        | verify SHA-256
+        v
+WebUSB boot transfer
+        |
+        v
+8087:0B37 runtime
+        |
+        v
+TM2 runtime / 6DoF start
+        |
+        v
+live pose reception
+        |
+        v
+main 3D viewer
+```
+
+This complete primary path succeeded on hardware. The commit-pinned GitHub Raw copy is therefore no longer the normal firmware source; it remains only as a fallback if the official relay path is unavailable.
 
 ## T265 direct browser path
 
@@ -80,7 +169,7 @@ A successful browser boot transferred all `9,323,648` bytes in a single WebUSB `
 
 ### Firmware retrieval strategy
 
-The repository does **not** bundle the T265 firmware image.
+The repository does **not** bundle or publish the T265 firmware image.
 
 The known Intel/librealsense source is:
 
@@ -88,9 +177,35 @@ The known Intel/librealsense source is:
 https://librealsense.intel.com/Releases/TM2/FW/target/0.2.0.951/target-0.2.0.951.mvcmd
 ```
 
-A GitHub Actions diagnostic has physically verified that this official source still returns the expected `9,323,648`-byte file with the SHA-256 above.
+GitHub Actions has verified that this official source returns the expected `9,323,648`-byte file with the SHA-256 above.
 
-Direct browser `fetch()` from GitHub Pages to the Intel/RealSense firmware hosts failed on the tested Chrome setup because of the cross-origin response policy. For the browser auto-boot path, the viewer therefore uses a **commit-pinned GitHub Raw mirror** discovered in `utahrobotics/t265-rs`:
+Direct browser `fetch()` from GitHub Pages to the Intel/RealSense firmware host is blocked by the host's cross-origin response policy in the tested Chrome setup. To keep the normal browser path on the official source, the viewer now uses a small Cloudflare Worker as a request-time relay.
+
+Primary relay endpoint:
+
+```text
+https://t265-intel-firmware-relay.temesotejam-t265.workers.dev/t265/0.2.0.951.mvcmd
+```
+
+The Worker implementation is intentionally narrow:
+
+- the Intel T265 `0.2.0.951` URL is fixed in the Worker
+- it is not an arbitrary open proxy
+- the firmware is fetched from the Intel/RealSense source at request time
+- the response uses `Cache-Control: no-store`
+- no R2, KV, D1, or other firmware-storage backend is used by this relay
+- the GitHub Pages browser origin is allowed to read the response through CORS
+
+The browser does **not** trust the relay response blindly. Before any USB write it independently requires both:
+
+- exact size: `9,323,648` bytes
+- exact SHA-256: `0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0`
+
+The relay itself is also tested by GitHub Actions after deployment. The deploy workflow downloads the firmware through the Worker and verifies the exact size and SHA-256 before reporting success.
+
+#### Fallback mirror
+
+If the official relay path fails, the main viewer can fall back to the previously verified commit-pinned GitHub Raw mirror:
 
 ```text
 repository: utahrobotics/t265-rs
@@ -98,14 +213,11 @@ commit:     46f88fcef679e766fb7b81f4ef5b9c6fa3b50424
 path:       firmware/target-0.2.0.951.mvcmd
 ```
 
-The mirror is never accepted blindly. Before any USB write, the browser requires both:
+The fallback is accepted only after the same exact browser-side size and SHA-256 checks.
 
-- exact size: `9,323,648` bytes
-- exact SHA-256: `0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0`
+The GitHub mirror path was physically verified earlier through the Boot Lab: download → hash verification → WebUSB boot → `8087:0B37` re-enumeration succeeded. It is now a backup path rather than the normal source.
 
-The GitHub mirror path has also been physically verified through the Boot Lab: download → hash verification → WebUSB boot → `8087:0B37` re-enumeration succeeded.
-
-`Boot Lab` still supports a manually supplied `target-*.mvcmd` file as a diagnostic/fallback path.
+`Boot Lab` also supports a manually supplied `target-*.mvcmd` file as a diagnostic/fallback path.
 
 ### Verified T265 runtime protocol
 
@@ -166,8 +278,9 @@ For normal use, **Boot Lab is no longer required**.
 3. Click **Connect T265 WebUSB**.
 4. Select the connected T265 from the browser device chooser.
 5. If the device is in boot mode (`03E7:2150`), the viewer automatically:
-   - downloads the commit-pinned firmware mirror,
-   - verifies size and SHA-256,
+   - fetches firmware from the Intel/RealSense official CDN through the Cloudflare relay,
+   - falls back to the commit-pinned GitHub Raw mirror only if the relay path fails,
+   - verifies exact size and SHA-256 in the browser,
    - boots the T265,
    - waits for `8087:0B37`,
    - starts the existing direct runtime/6DoF path.
@@ -236,12 +349,14 @@ Current direct-browser depth features include:
 
 The diagnostic pages are intentionally retained even though the main viewer now supports the normal T265 flow end to end.
 
-- `t265-webusb.html` — boot-image retrieval/verification, boot transfer, re-enumeration and runtime-interface diagnostics
+- `t265-webusb.html` — Intel-relay retrieval-only test, direct-official/GitHub retrieval probes, boot transfer, re-enumeration and runtime-interface diagnostics
 - `t265-pose.html` — isolated TM2 command transport and live 6DoF pose diagnostics
 - `webusb-probe.html` — generic USB descriptors and interface claimability
 - `uvc-probe.html` — manual `getUserMedia()` stream inspection
 - `uvc-scan.html` — automatic RealSense RGB/Depth input scan
 - `depth-float-probe.html` — WebGL2 R32F precision / Z16 preservation test
+
+The Boot Lab's **Test Intel relay fetch** path is retrieval-only: it downloads through the relay, logs response headers, byte count, elapsed time, computed SHA-256 and pass/fail checks, then stops without sending anything over WebUSB.
 
 Use these pages for regression testing and protocol debugging; normal T265 operation should start from the main viewer.
 
@@ -263,11 +378,25 @@ GitHub Pages frontend
 
 See [`bridge/README.md`](bridge/README.md) and [`docs/BRIDGE_PROTOCOL.md`](docs/BRIDGE_PROTOCOL.md).
 
-## GitHub Pages
+## GitHub Pages and Cloudflare relay
 
-The repository is deployed as a static GitHub Pages site with `.github/workflows/pages.yml`. No backend build step is required for the viewer.
+The viewer itself is deployed as a static GitHub Pages site with `.github/workflows/pages.yml`. No backend build step is required for the viewer.
 
-A separate GitHub Actions firmware-source probe verifies that the official Intel/librealsense T265 firmware source is still reachable from a GitHub-hosted runner and still matches the expected size/SHA-256. The diagnostic workflow deletes its temporary copy and does not publish the firmware as an artifact.
+The T265 firmware relay is deployed separately as a Cloudflare Worker from:
+
+```text
+relay/cloudflare-worker/
+```
+
+using:
+
+```text
+.github/workflows/deploy-t265-intel-relay.yml
+```
+
+The relay deployment workflow also performs an end-to-end verification through the deployed Worker and requires the returned file to match the expected `9,323,648` bytes and SHA-256 before the job succeeds.
+
+A separate firmware-source probe verifies that the official Intel/librealsense T265 firmware source is still reachable from a GitHub-hosted runner and still matches the expected size/SHA-256. Diagnostic workflows delete temporary copies and do not publish the firmware as an artifact.
 
 ## Milestones
 
@@ -306,6 +435,10 @@ A separate GitHub Actions firmware-source probe verifies that the official Intel
 - [x] Verify commit-pinned GitHub Raw mirror against the same size/SHA-256
 - [x] Browser boot using the verified GitHub Raw mirror
 - [x] Main-viewer automatic boot → runtime → live 6DoF flow
+- [x] Deploy request-time Cloudflare relay for the Intel/RealSense official firmware source
+- [x] Verify the deployed relay end to end in GitHub Actions
+- [x] Physically verify browser relay diagnostic: HTTP 200, 9,323,648 B, SHA-256 match
+- [x] Physically verify main-viewer official-relay boot → runtime → live 6DoF flow
 - [ ] Cross-check browser pose numerically against `pyrealsense2`
 - [ ] CSV trajectory recording
 - [ ] Fisheye / IMU host streaming where practical
@@ -314,7 +447,7 @@ A separate GitHub Actions firmware-source probe verifies that the official Intel
 
 Intel RealSense T265 is an end-of-life product. The native bridge pins `pyrealsense2` to a T265-compatible SDK generation, while the browser implementation is derived from public T265-compatible librealsense TM2 protocol definitions and is tested against firmware `0.2.0.951`.
 
-The project does not bundle Intel firmware. The automatic browser path currently depends on a commit-pinned third-party GitHub mirror that is accepted only after exact byte-size and SHA-256 verification against the known Intel image.
+The project does not bundle Intel firmware. The normal automatic browser path now uses the Intel/RealSense official firmware source through the request-time Cloudflare relay and still verifies exact size/SHA-256 in the browser before any USB write. The commit-pinned third-party GitHub mirror remains only as a fallback.
 
 ## License
 
