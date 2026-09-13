@@ -3,7 +3,7 @@ name: Deploy T265 Intel Firmware Relay
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "intel-fw-runtime-relay"]
     paths:
       - "relay/cloudflare-worker/**"
       - ".github/workflows/deploy-t265-intel-relay.yml"
