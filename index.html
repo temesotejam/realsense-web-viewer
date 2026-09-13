@@ -56,7 +56,7 @@
           <button id="connectT265Webusb" class="primary">Connect T265 WebUSB</button>
           <button id="openT265Boot" class="secondary">Boot Lab</button>
         </div>
-        <p id="t265WebusbHint" class="hint">Direct T265 WebUSB is available in desktop Chrome/Edge. Use Boot Lab first only when the camera is in 03E7:2150 boot mode.</p>
+        <p id="t265WebusbHint" class="hint">Direct T265 WebUSB supports both 03E7:2150 boot mode and 8087:0B37 runtime mode. Boot Lab remains available for diagnostics.</p>
       </section>
 
       <section id="d400Controls" hidden>
@@ -122,6 +122,7 @@
     RealSense Web Viewer · static GitHub Pages frontend · direct T265 WebUSB + D400 browser depth + native bridge
   </footer>
 
+  <script src="src/t265-autoboot.js"></script>
   <script src="src/t265-direct.js"></script>
   <script type="module" src="src/main.js"></script>
   <script type="module" src="src/browser-depth.js"></script>
