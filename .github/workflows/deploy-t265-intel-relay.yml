@@ -19,6 +19,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Ensure workers.dev subdomain
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/workers/subdomain"
+          current="$(curl -sS \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${api}")"
+          subdomain="$(jq -r '.result.subdomain // empty' <<<"${current}")"
+
+          if [[ -z "${subdomain}" ]]; then
+            desired="temesotejam-t265-1354330504"
+            created="$(curl -sS -X PUT \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -nc --arg subdomain "${desired}" '{subdomain:$subdomain}')" \
+              "${api}")"
+            if [[ "$(jq -r '.success // false' <<<"${created}")" != "true" ]]; then
+              echo "Failed to register workers.dev subdomain."
+              jq '.errors' <<<"${created}"
+              exit 1
+            fi
+            subdomain="$(jq -r '.result.subdomain' <<<"${created}")"
+            echo "Registered workers.dev subdomain: ${subdomain}"
+          else
+            echo "Using existing workers.dev subdomain: ${subdomain}"
+          fi
+
+          echo "CF_WORKERS_SUBDOMAIN=${subdomain}" >> "${GITHUB_ENV}"
+
       - name: Deploy Cloudflare Worker
         uses: cloudflare/wrangler-action@v4
         with:
@@ -27,3 +61,26 @@ jobs:
           workingDirectory: relay/cloudflare-worker
           wranglerVersion: "4"
           command: deploy
+
+      - name: Verify relay end-to-end
+        shell: bash
+        run: |
+          set -euo pipefail
+          relay_url="https://t265-intel-firmware-relay.${CF_WORKERS_SUBDOMAIN}.workers.dev/t265/0.2.0.951.mvcmd"
+          expected_size="9323648"
+          expected_sha="0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0"
+          target="${RUNNER_TEMP}/target-0.2.0.951.mvcmd"
+
+          echo "Relay URL: ${relay_url}"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors \
+            -o "${target}" "${relay_url}"
+
+          size="$(stat -c%s "${target}")"
+          sha="$(sha256sum "${target}" | awk '{print $1}')"
+          echo "Downloaded size: ${size}"
+          echo "SHA-256: ${sha}"
+
+          [[ "${size}" == "${expected_size}" ]]
+          [[ "${sha}" == "${expected_sha}" ]]
+          rm -f "${target}"
+          echo "VERIFIED: Cloudflare relay returned the expected Intel T265 0.2.0.951 image."
