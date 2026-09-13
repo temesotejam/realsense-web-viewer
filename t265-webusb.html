@@ -53,7 +53,7 @@
   <section class="card note">
     <strong>Goal:</strong> reproduce the first stage of librealsense's T265 startup in the browser.
     The boot device is <code>03E7:2150</code>. librealsense opens USB interface 0 and sends the complete T265 VPU boot image to its first Bulk OUT endpoint. A successful boot should disconnect the Movidius device and re-enumerate the T265 runtime device, normally as <code>8087:0B37</code> (with <code>8087:0AF3</code> also recognized by librealsense rules).
-    <p class="warning"><strong>Experimental:</strong> the repository does not bundle Intel firmware. The official-fetch probe below only tests whether Chrome can directly retrieve the known T265 0.2.0.951 image and verifies its size/SHA-256; the existing manual file path remains unchanged.</p>
+    <p class="warning"><strong>Experimental:</strong> the repository does not bundle Intel firmware. The probes below only test retrieval and verify the exact known firmware size/SHA-256. The GitHub mirror probe is a third-party source and is accepted only when the full SHA-256 matches the previously verified Intel image.</p>
     <div class="actions"><a class="button" href="./">Back to Viewer</a><a class="button" href="./webusb-probe.html">Generic WebUSB Probe</a></div>
   </section>
 
@@ -75,9 +75,11 @@
       <h2>2 · Boot image</h2>
       <div class="actions">
         <button id="fetchOfficialFirmware" class="primary">Test official 0.2.0.951 fetch</button>
+        <button id="fetchGitHubFirmware">Test GitHub mirror fetch</button>
       </div>
-      <p id="officialFirmwareStatus" class="muted">Tests direct browser fetch from the RealSense/librealsense firmware hosts. No USB transfer is performed by this button.</p>
-      <p class="muted">Manual fallback:</p>
+      <p id="officialFirmwareStatus" class="muted">Official: tests direct browser fetch from the RealSense/librealsense firmware hosts.</p>
+      <p id="githubFirmwareStatus" class="muted">GitHub mirror: commit-pinned third-party copy from <code>utahrobotics/t265-rs</code>; full size and SHA-256 must match.</p>
+      <p class="muted">Neither test button performs a USB transfer. Manual fallback:</p>
       <input id="firmwareFile" type="file" accept=".mvcmd,.bin,.fw,application/octet-stream" />
       <dl>
         <div><dt>Name</dt><dd id="firmwareName">—</dd></div>
