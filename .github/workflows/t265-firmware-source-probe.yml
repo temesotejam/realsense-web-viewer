@@ -1,0 +1,55 @@
+name: T265 Firmware Source Probe
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/t265-firmware-source-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-official-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch official T265 firmware and verify hash
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_size="9323648"
+          expected_sha256="0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0"
+          target="${RUNNER_TEMP}/target-0.2.0.951.mvcmd"
+          urls=(
+            "https://librealsense.intel.com/Releases/TM2/FW/target/0.2.0.951/target-0.2.0.951.mvcmd"
+            "https://realsense-hw-public.s3.amazonaws.com/Releases/TM2/FW/target/0.2.0.951/target-0.2.0.951.mvcmd"
+          )
+
+          ok=0
+          for url in "${urls[@]}"; do
+            rm -f "$target"
+            echo "Trying $url"
+            if curl --fail --location --silent --show-error \
+              --retry 2 --connect-timeout 15 --max-time 180 \
+              "$url" --output "$target"; then
+              size="$(wc -c < "$target" | tr -d '[:space:]')"
+              sha256="$(sha256sum "$target" | awk '{print $1}')"
+              echo "Downloaded size: $size"
+              echo "SHA-256: $sha256"
+              if [[ "$size" == "$expected_size" && "$sha256" == "$expected_sha256" ]]; then
+                echo "VERIFIED: official source delivered the expected T265 0.2.0.951 image."
+                ok=1
+                break
+              fi
+              echo "Downloaded content did not match the expected firmware."
+            else
+              echo "Download failed from this source."
+            fi
+          done
+
+          rm -f "$target"
+          if [[ "$ok" != "1" ]]; then
+            echo "No official source produced the expected firmware."
+            exit 1
+          fi
