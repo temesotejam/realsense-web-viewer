@@ -1,16 +1,208 @@
 # RealSense Web Viewer
 
-Browser-based visualization for Intel RealSense depth and tracking cameras. The project is intentionally **browser-first**: use standard browser camera/USB APIs where they preserve the RealSense data, and keep a native `librealsense` bridge only as a fallback for features that browsers cannot expose.
+Browser-based visualization for Intel RealSense depth and tracking cameras. The project is intentionally **browser-first**: use standard browser camera/USB APIs where they preserve the RealSense data, and keep a native `librealsense` bridge only as a fallback/reference path.
 
-> Status: experimental v0.4 — direct D400 depth and direct T265 6DoF are both physically verified in desktop Chromium.
+> Status: experimental v0.4 — direct D400 depth and the complete T265 browser-only boot → runtime → live 6DoF → 3D viewer path are physically verified in desktop Chromium.
 
-## Current direction
+## Current status at a glance
 
-### D400 / D405 depth cameras — direct browser path
+### D400 / D405
+
+- Direct browser Depth input discovery through `getUserMedia()`
+- WebGL2 `R32F / FLOAT` path preserving Z16-like samples
+- Live depth colorizer
+- Raw Z16 probe
+- Editable depth scale
+- No Python process or local server required for the direct depth path
+
+### T265
+
+The T265 path now works end to end from the **main viewer**:
+
+```text
+Connect T265 WebUSB
+        |
+        +-- 8087:0B37 runtime already present
+        |       |
+        |       +--> start TM2 runtime transport
+        |
+        +-- 03E7:2150 boot device
+                |
+                | download known 0.2.0.951 image
+                | verify exact size + SHA-256
+                | WebUSB IF0 / Bulk OUT boot transfer
+                v
+          8087:0B37 runtime
+                |
+                | Bulk OUT/IN #2 = TM2 commands
+                | Interrupt IN #3 = 6DoF pose
+                v
+          104-byte live pose packets
+                |
+                | ~200 Hz raw pose reception
+                | ~display-rate viewer feed
+                v
+          main 3D trajectory viewer
+```
+
+This complete flow has been physically verified with a T265 running firmware `0.2.0.951`.
+
+## T265 direct browser path
+
+### Verified USB states
+
+The T265 initially appears as the Movidius boot device:
+
+- Boot VID:PID: `03E7:2150`
+- Runtime VID:PID: `8087:0B37`
+- `8087:0AF3` is also accepted as a T265-family runtime ID
+
+The verified boot transfer is:
+
+```text
+03E7:2150
+  -> interface 0
+  -> first Bulk OUT endpoint (#1 on the tested unit)
+  -> one transfer of the complete target-0.2.0.951.mvcmd image
+  -> USB disconnect / re-enumeration
+  -> 8087:0B37
+```
+
+The physically verified boot image is:
+
+```text
+name:     target-0.2.0.951.mvcmd
+size:     9,323,648 bytes
+SHA-256:  0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0
+```
+
+A successful browser boot transferred all `9,323,648` bytes in a single WebUSB `transferOut()` and re-enumerated as `8087:0B37`.
+
+### Firmware retrieval strategy
+
+The repository does **not** bundle the T265 firmware image.
+
+The known Intel/librealsense source is:
+
+```text
+https://librealsense.intel.com/Releases/TM2/FW/target/0.2.0.951/target-0.2.0.951.mvcmd
+```
+
+A GitHub Actions diagnostic has physically verified that this official source still returns the expected `9,323,648`-byte file with the SHA-256 above.
+
+Direct browser `fetch()` from GitHub Pages to the Intel/RealSense firmware hosts failed on the tested Chrome setup because of the cross-origin response policy. For the browser auto-boot path, the viewer therefore uses a **commit-pinned GitHub Raw mirror** discovered in `utahrobotics/t265-rs`:
+
+```text
+repository: utahrobotics/t265-rs
+commit:     46f88fcef679e766fb7b81f4ef5b9c6fa3b50424
+path:       firmware/target-0.2.0.951.mvcmd
+```
+
+The mirror is never accepted blindly. Before any USB write, the browser requires both:
+
+- exact size: `9,323,648` bytes
+- exact SHA-256: `0265fd111611908b822cdaf4a3fe5b631c50539b2805d2f364c498aa71c007c0`
+
+The GitHub mirror path has also been physically verified through the Boot Lab: download → hash verification → WebUSB boot → `8087:0B37` re-enumeration succeeded.
+
+`Boot Lab` still supports a manually supplied `target-*.mvcmd` file as a diagnostic/fallback path.
+
+### Verified T265 runtime protocol
+
+The runtime interface on the tested unit is vendor-specific interface 0 with:
+
+- Bulk OUT #1 / Bulk IN #1
+- Bulk OUT #2 / Bulk IN #2
+- Interrupt OUT #3 / Interrupt IN #3
+
+The browser runtime implementation uses:
+
+- Bulk OUT/IN #2 for TM2 request/response commands
+- Interrupt IN #3 for live pose packets
+
+The following runtime commands have been physically verified from JavaScript:
+
+- `DEV_SET_LOW_POWER_MODE`
+- `DEV_GET_DEVICE_INFO`
+- `DEV_GET_TIME`
+- `DEV_GET_SUPPORTED_RAW_STREAMS`
+- `DEV_RAW_STREAMS_CONTROL`
+- `SLAM_6DOF_CONTROL`
+- `DEV_START`
+- `DEV_STOP`
+
+Firmware `0.2.0.951` reports `UNKNOWN_MESSAGE_ID` for `SLAM_SET_6DOF_INTERRUPT_RATE`, so the working path intentionally leaves the firmware's default pose interrupt behavior in place.
+
+The verified internal tracking profile selection mirrors the T265-compatible librealsense path:
+
+- Fisheye[0] — 848×800 @ 30 Hz
+- Fisheye[1] — 848×800 @ 30 Hz
+- Gyro[0] — 200 Hz
+- Accelerometer[0] — 62 Hz
+
+Those streams are configured for the T265's internal SLAM pipeline; the direct-pose path only consumes the resulting pose packets on the host.
+
+### Verified live pose
+
+Live pose packets are `104` bytes on the tested unit. Sustained browser reception was measured at approximately `200 Hz`:
+
+```text
+Pose frame 300:  199.4 Hz
+Pose frame 600:  200.5 Hz
+Pose frame 900:  200.4 Hz
+Pose frame 1200: 200.3 Hz
+```
+
+The USB receiver processes the raw pose stream independently from the canvas refresh rate. The main viewer therefore keeps receiving the high-rate pose stream while feeding visualization updates at roughly display rate.
+
+## Using the main viewer
+
+### T265 direct WebUSB
+
+For normal use, **Boot Lab is no longer required**.
+
+1. Open the main GitHub Pages viewer in desktop Chrome/Edge.
+2. Select the **T265** tab.
+3. Click **Connect T265 WebUSB**.
+4. Select the connected T265 from the browser device chooser.
+5. If the device is in boot mode (`03E7:2150`), the viewer automatically:
+   - downloads the commit-pinned firmware mirror,
+   - verifies size and SHA-256,
+   - boots the T265,
+   - waits for `8087:0B37`,
+   - starts the existing direct runtime/6DoF path.
+6. If the T265 is already in runtime mode, tracking starts directly.
+
+The main viewer then provides:
+
+- live X / Y / Z position
+- Roll / Pitch / Yaw
+- velocity
+- tracker confidence
+- 3D trajectory
+- origin reset
+- trail clearing
+- raw T265 pose-rate status
+
+No Python process, local server, or running librealsense process is required for this path.
+
+### D400 Direct USB
+
+Open the **D400** tab on the GitHub Pages viewer, then:
+
+1. Click **Refresh USB** and allow camera permission if requested.
+2. Select the RealSense input whose label contains `Depth`.
+3. Click **Start Depth**.
+4. Move the pointer over the image to inspect raw Z16 and converted distance.
+5. Adjust **Display range** or **Depth scale** as needed.
+
+The default depth scale is currently `0.001 m / Z16 unit`. Treat metric values as provisional until the actual device/configuration depth unit has been verified.
+
+## D400 / D405 browser depth details
 
 On Windows 10 + Chrome, physical testing confirmed that RealSense depth pins can appear as ordinary `videoinput` devices and can be opened with `getUserMedia()`.
 
-The important discovery is that Chrome's historical floating-point depth-video path is usable on the tested D430 configuration:
+The tested browser path is:
 
 ```text
 RealSense Depth UVC pin
@@ -28,9 +220,9 @@ Preserved normalized 16-bit samples
 Z16 depth value
 ```
 
-The browser probe produced a `LIKELY_Z16` signature: `R * 65535` was extremely close to integer values across the frame. The main viewer contains a **Direct USB** section under the D400 tab that uses the same R32F path in real time.
+The browser probe produced a `LIKELY_Z16` signature: `R * 65535` was extremely close to integer values across the frame.
 
-Current direct-browser features:
+Current direct-browser depth features include:
 
 - RealSense Depth input discovery
 - Start/stop direct UVC Depth streaming
@@ -38,104 +230,22 @@ Current direct-browser features:
 - Display-range control
 - Raw Z16 probe under the mouse pointer
 - Metric-distance display using an editable depth scale
-- D430/D435-style and D405 Depth inputs can be discovered by label
+- D430/D435-style and D405 Depth inputs discoverable by label
 
-The default depth scale is currently `0.001 m / Z16 unit`, matching the historical D435 browser calibration data, but the field is deliberately editable. Do not treat metric values as calibrated measurements until the actual device/configuration depth unit has been verified.
+## Browser diagnostic pages
 
-### T265 — verified browser-only WebUSB path
+The diagnostic pages are intentionally retained even though the main viewer now supports the normal T265 flow end to end.
 
-The T265 initially enumerates as a Movidius boot device (`03E7:2150`). Physical testing confirmed the complete browser-only startup and pose path:
+- `t265-webusb.html` — boot-image retrieval/verification, boot transfer, re-enumeration and runtime-interface diagnostics
+- `t265-pose.html` — isolated TM2 command transport and live 6DoF pose diagnostics
+- `webusb-probe.html` — generic USB descriptors and interface claimability
+- `uvc-probe.html` — manual `getUserMedia()` stream inspection
+- `uvc-scan.html` — automatic RealSense RGB/Depth input scan
+- `depth-float-probe.html` — WebGL2 R32F precision / Z16 preservation test
 
-```text
-03E7:2150 Movidius boot device
-        |
-        | WebUSB · IF0 · Bulk OUT #1
-        | target-0.2.0.951.mvcmd
-        v
-USB disconnect / re-enumeration
-        |
-        v
-8087:0B37 T265 runtime
-        |
-        | claim vendor-specific IF0
-        | Bulk OUT/IN #2 = TM2 command transport
-        | Interrupt IN #3 = 6DoF pose
-        v
-104-byte live pose packets
-~200 Hz measured on the physical test unit
-```
+Use these pages for regression testing and protocol debugging; normal T265 operation should start from the main viewer.
 
-The physical boot test transferred the complete 9,323,648-byte boot image in one WebUSB `transferOut()` and the device re-enumerated as `8087:0B37`. The runtime interface exposed Bulk #1, Bulk #2 and Interrupt #3 endpoint pairs and was claimable from Chrome.
-
-`DEV_GET_DEVICE_INFO`, `DEV_GET_TIME`, `DEV_GET_SUPPORTED_RAW_STREAMS`, `DEV_RAW_STREAMS_CONTROL`, `SLAM_6DOF_CONTROL` and `DEV_START` were all verified over the browser TM2 transport. Firmware `0.2.0.951` reports `UNKNOWN_MESSAGE_ID` for `SLAM_SET_6DOF_INTERRUPT_RATE`, so the working browser path follows the compatible behavior of leaving the firmware's default interrupt rate in place.
-
-The verified tracking configuration mirrors T265-compatible librealsense selection:
-
-- Fisheye[0] — 848×800 @ 30 Hz
-- Fisheye[1] — 848×800 @ 30 Hz
-- Gyro[0] — 200 Hz
-- Accelerometer[0] — 62 Hz
-
-The raw image/IMU streams remain internal to the T265 for SLAM; only pose packets are consumed by the browser in the direct-pose path.
-
-### T265 browser pages
-
-`t265-webusb.html` handles the boot/re-enumeration experiment. It can:
-
-- request only the `03E7:2150` boot device
-- locate interface 0 and its Bulk OUT endpoint
-- load a user-supplied `target-*.mvcmd` image without bundling proprietary firmware
-- calculate and log the selected image SHA-256
-- send the complete boot image with one WebUSB `transferOut()` operation
-- detect / authorize `8087:0B37` / `8087:0AF3` runtime devices
-- enumerate runtime interfaces/endpoints and test claimability
-
-`t265-pose.html` is the isolated runtime diagnostic. It verifies command transport and live pose parsing without involving the main visualization.
-
-The main viewer now also exposes **Connect T265 WebUSB**. It routes direct browser pose into the existing live-pose path, so the existing 3D trajectory, position/orientation/velocity readouts, origin reset and trail clearing can be reused without a Python process or local server.
-
-The direct receiver measures every raw interrupt packet (about 200 Hz on the tested unit) while feeding the visualization at approximately display rate to avoid coupling USB reception to canvas rendering.
-
-The native T265 bridge remains available as a fallback and a reference implementation.
-
-## Viewer modes
-
-### T265 demo / direct WebUSB
-
-- Simulated 6DoF pose when no hardware is connected
-- Direct T265 WebUSB runtime connection
-- 3D trajectory
-- Position, orientation and velocity readouts
-- Origin reset and trail clearing
-- Raw T265 pose rate shown in the WebUSB status hint
-
-For direct hardware:
-
-1. If the T265 is `03E7:2150`, use **Boot Lab** and send a genuine `target-*.mvcmd` first.
-2. Return to the main viewer and click **Connect T265 WebUSB**.
-3. Select the `8087:0B37` T265 runtime device.
-4. The viewer switches to the existing Live path and begins drawing real T265 pose.
-5. Use the normal **Disconnect** button in Live mode to stop the direct session.
-
-### D400 demo
-
-- Synthetic depth frame
-- Depth colorizer
-- Interactive distance probe
-
-### D400 Direct USB
-
-Open the **D400** tab on the GitHub Pages viewer, then:
-
-1. Click **Refresh USB** and allow camera permission if requested.
-2. Select the RealSense input whose label contains `Depth`.
-3. Click **Start Depth**.
-4. Move the pointer over the image to inspect raw Z16 and converted distance.
-5. Adjust **Display range** or **Depth scale** as needed.
-
-No Python process or local server is required for this path.
-
-### Native bridge
+## Native bridge
 
 A local bridge is still included for SDK-backed streams and comparison/reference testing:
 
@@ -153,24 +263,13 @@ GitHub Pages frontend
 
 See [`bridge/README.md`](bridge/README.md) and [`docs/BRIDGE_PROTOCOL.md`](docs/BRIDGE_PROTOCOL.md).
 
-## Browser diagnostic pages
-
-The repository includes small experiments used to verify what the browser actually receives:
-
-- `t265-webusb.html` — T265 boot-image transfer, runtime re-enumeration and vendor-interface diagnostics
-- `t265-pose.html` — T265 runtime TM2 command transport and live 6DoF pose diagnostics
-- `webusb-probe.html` — USB descriptors and interface claimability
-- `uvc-probe.html` — manual `getUserMedia()` stream inspection
-- `uvc-scan.html` — automatic RealSense RGB/Depth input scan
-- `depth-float-probe.html` — WebGL2 R32F precision / Z16 preservation test
-
-These pages are intentionally retained even after main-viewer integration because they isolate hardware/browser behavior during regression testing.
-
 ## GitHub Pages
 
 The repository is deployed as a static GitHub Pages site with `.github/workflows/pages.yml`. No backend build step is required for the viewer.
 
-## Planned milestones
+A separate GitHub Actions firmware-source probe verifies that the official Intel/librealsense T265 firmware source is still reachable from a GitHub-hosted runner and still matches the expected size/SHA-256. The diagnostic workflow deletes its temporary copy and does not publish the firmware as an artifact.
+
+## Milestones
 
 ### v0.2 — direct D400 live depth
 
@@ -186,7 +285,6 @@ The repository is deployed as a static GitHub Pages site with `.github/workflows
 
 ### v0.3 — 3D depth tools
 
-- [ ] Point cloud
 - [ ] Device/resolution intrinsics profiles
 - [ ] Pixel-to-3D coordinate conversion
 - [ ] ROI depth statistics
@@ -196,21 +294,27 @@ The repository is deployed as a static GitHub Pages site with `.github/workflows
 ### v0.4 — T265 direct browser mode
 
 - [x] Movidius boot device discovered through WebUSB
-- [x] Vendor-specific interface claim test
-- [x] Browser boot transport implemented from librealsense behavior
 - [x] Physical browser boot-image transfer confirmation
-- [x] Runtime device re-enumeration confirmation (`8087:0B37`)
+- [x] Runtime re-enumeration confirmation (`8087:0B37`)
+- [x] Runtime vendor interface/endpoints confirmed and claimable
 - [x] Runtime TM2 USB protocol over Bulk #2
+- [x] T265-compatible four-profile tracking configuration
 - [x] Live 104-byte 6DoF pose over Interrupt #3
-- [x] Physical ~200 Hz pose reception confirmation
+- [x] Physical ~200 Hz sustained pose reception confirmation
 - [x] Feed direct WebUSB pose into the existing trajectory viewer
+- [x] Verify official firmware retrieval and expected SHA-256 from GitHub Actions
+- [x] Verify commit-pinned GitHub Raw mirror against the same size/SHA-256
+- [x] Browser boot using the verified GitHub Raw mirror
+- [x] Main-viewer automatic boot → runtime → live 6DoF flow
 - [ ] Cross-check browser pose numerically against `pyrealsense2`
-- [ ] Fisheye / IMU host streaming where practical
 - [ ] CSV trajectory recording
+- [ ] Fisheye / IMU host streaming where practical
 
 ## T265 compatibility note
 
-Intel RealSense T265 is an end-of-life product. The bridge pins `pyrealsense2` to a T265-compatible SDK generation so that browser work can continue without tying the whole web frontend to a legacy SDK. The browser implementation is derived from the public T265-compatible librealsense TM2 protocol definitions and is tested against firmware `0.2.0.951`.
+Intel RealSense T265 is an end-of-life product. The native bridge pins `pyrealsense2` to a T265-compatible SDK generation, while the browser implementation is derived from public T265-compatible librealsense TM2 protocol definitions and is tested against firmware `0.2.0.951`.
+
+The project does not bundle Intel firmware. The automatic browser path currently depends on a commit-pinned third-party GitHub mirror that is accepted only after exact byte-size and SHA-256 verification against the known Intel image.
 
 ## License
 
