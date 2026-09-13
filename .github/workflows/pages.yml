@@ -32,6 +32,7 @@ jobs:
           node --check src/t265-webusb.js
           node --check src/t265-pose-rawfix.js
           node --check src/t265-pose.js
+          node --check src/t265-direct.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

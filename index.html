@@ -52,6 +52,11 @@
           <button id="resetOrigin" class="secondary">Reset origin</button>
           <button id="clearTrail" class="secondary">Clear trail</button>
         </div>
+        <div class="button-row">
+          <button id="connectT265Webusb" class="primary">Connect T265 WebUSB</button>
+          <button id="openT265Boot" class="secondary">Boot Lab</button>
+        </div>
+        <p id="t265WebusbHint" class="hint">Direct T265 WebUSB is available in desktop Chrome/Edge. Use Boot Lab first only when the camera is in 03E7:2150 boot mode.</p>
       </section>
 
       <section id="d400Controls" hidden>
@@ -70,7 +75,7 @@
         <label class="field-label" for="bridgeUrl">WebSocket endpoint</label>
         <input id="bridgeUrl" class="text-input" type="text" value="ws://127.0.0.1:8765" spellcheck="false" />
         <button id="connectBridge" class="primary full-width">Connect</button>
-        <p id="bridgeHint" class="hint">The native bridge is not part of v0.1 yet. This frontend already accepts the documented pose/depth messages.</p>
+        <p id="bridgeHint" class="hint">Native bridge and in-browser T265 WebUSB both feed this same live pose/depth path.</p>
       </section>
     </aside>
 
@@ -107,16 +112,17 @@
         </div>
         <div>
           <span class="status-label">Viewer</span>
-          <strong>v0.3</strong>
+          <strong>v0.4</strong>
         </div>
       </div>
     </section>
   </main>
 
   <footer>
-    RealSense Web Viewer · static GitHub Pages frontend · T265 + D400 architecture
+    RealSense Web Viewer · static GitHub Pages frontend · direct T265 WebUSB + D400 browser depth + native bridge
   </footer>
 
+  <script src="src/t265-direct.js"></script>
   <script type="module" src="src/main.js"></script>
   <script type="module" src="src/browser-depth.js"></script>
   <script type="module" src="src/browser-pointcloud.js"></script>
