@@ -53,7 +53,7 @@
   <section class="card note">
     <strong>Goal:</strong> reproduce the first stage of librealsense's T265 startup in the browser.
     The boot device is <code>03E7:2150</code>. librealsense opens USB interface 0 and sends the complete T265 VPU boot image to its first Bulk OUT endpoint. A successful boot should disconnect the Movidius device and re-enumerate the T265 runtime device, normally as <code>8087:0B37</code> (with <code>8087:0AF3</code> also recognized by librealsense rules).
-    <p class="warning"><strong>Experimental:</strong> use only a genuine T265 boot image (<code>target-*.mvcmd</code>). This page does not bundle or auto-download Intel firmware.</p>
+    <p class="warning"><strong>Experimental:</strong> the repository does not bundle Intel firmware. The official-fetch probe below only tests whether Chrome can directly retrieve the known T265 0.2.0.951 image and verifies its size/SHA-256; the existing manual file path remains unchanged.</p>
     <div class="actions"><a class="button" href="./">Back to Viewer</a><a class="button" href="./webusb-probe.html">Generic WebUSB Probe</a></div>
   </section>
 
@@ -73,6 +73,11 @@
 
     <section class="card step">
       <h2>2 · Boot image</h2>
+      <div class="actions">
+        <button id="fetchOfficialFirmware" class="primary">Test official 0.2.0.951 fetch</button>
+      </div>
+      <p id="officialFirmwareStatus" class="muted">Tests direct browser fetch from the RealSense/librealsense firmware hosts. No USB transfer is performed by this button.</p>
+      <p class="muted">Manual fallback:</p>
       <input id="firmwareFile" type="file" accept=".mvcmd,.bin,.fw,application/octet-stream" />
       <dl>
         <div><dt>Name</dt><dd id="firmwareName">—</dd></div>
@@ -99,7 +104,7 @@
       <h2>4 · Result</h2>
       <p id="resultText" class="muted">Waiting for a boot device.</p>
       <div class="actions"><button id="copyLog">Copy log</button><button id="clearLog">Clear log</button></div>
-      <p class="muted">This phase intentionally stops before sending T265 runtime commands. Once the runtime vendor interface/endpoints are confirmed, the pose protocol can be implemented against the same WebUSB transport.</p>
+      <p class="muted">The isolated Pose Lab remains available for TM2 runtime/6DoF diagnostics after the boot stage.</p>
     </section>
   </div>
 
@@ -109,5 +114,6 @@
   </section>
 </main>
 <script type="module" src="src/t265-webusb.js"></script>
+<script src="src/t265-official-fetch-test.js"></script>
 </body>
 </html>
