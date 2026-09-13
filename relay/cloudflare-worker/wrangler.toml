@@ -1,0 +1,5 @@
+name = "t265-intel-firmware-relay"
+main = "src/index.js"
+compatibility_date = "2026-09-13"
+workers_dev = true
+# Redeploy after rotating the Cloudflare user API token.
