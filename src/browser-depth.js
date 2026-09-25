@@ -447,14 +447,16 @@ function scheduleDepthFrames(direct, ui) {
 
 function updateProbe(direct, ui) {
   if (!direct.active || !direct.pipeline || !direct.probe) return;
-  const x = Math.min(direct.pipeline.width - 1, Math.floor(direct.probe.x * direct.pipeline.width));
-  const y = Math.min(direct.pipeline.height - 1, Math.floor(direct.probe.y * direct.pipeline.height));
+  const displayX = Math.min(direct.pipeline.width - 1, Math.floor(direct.probe.x * direct.pipeline.width));
+  const displayY = Math.min(direct.pipeline.height - 1, Math.floor(direct.probe.y * direct.pipeline.height));
+  const x = direct.pipeline.width - 1 - displayX;
+  const y = direct.pipeline.height - 1 - displayY;
   const normalized = direct.pipeline.readNormalizedDepth(x, y);
   const z16 = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
   const distanceM = z16 * depthScale(ui);
 
-  ui.probeX.textContent = String(x);
-  ui.probeY.textContent = String(y);
+  ui.probeX.textContent = String(displayX);
+  ui.probeY.textContent = String(displayY);
   ui.probeRaw.textContent = String(z16);
   ui.probeDepth.textContent = z16 > 0 ? `${distanceM.toFixed(3)} m` : "invalid";
 }
@@ -509,7 +511,10 @@ function createFloatDepthPipeline(canvas, video, width, height) {
     out vec2 vUv;
     void main() {
       gl_Position = vec4(aPosition.x * 2.0 - 1.0, 1.0 - aPosition.y * 2.0, 0.0, 1.0);
-      vUv = aPosition;
+      // The D435 browser UVC depth image is 180° from the physical upright
+      // mounting used by this project. Rotate both axes so screen/API coordinates
+      // match the camera's physical orientation.
+      vUv = vec2(1.0 - aPosition.x, 1.0 - aPosition.y);
     }
   `;
 
@@ -635,7 +640,9 @@ function createFloatDepthPipeline(canvas, video, width, height) {
         for (let x = 0; x < apiWidth; x++) {
           const srcX = Math.min(pipeline.width - 1, Math.floor((x + 0.5) * sx));
           const normalized = nativeFloat[srcY * pipeline.width + srcX];
-          out[y * apiWidth + x] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
+          const dstX = apiWidth - 1 - x;
+          const dstY = apiHeight - 1 - y;
+          out[dstY * apiWidth + dstX] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
         }
       }
       return out;
