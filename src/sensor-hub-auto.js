@@ -1,4 +1,4 @@
-import { sensorHub } from "./realsense-sensor-api.js?v=20260925.6";
+import { sensorHub } from "./realsense-sensor-api.js?v=20260925.7";
 
 const $ = (id) => document.getElementById(id);
 const state = {
