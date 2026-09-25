@@ -125,6 +125,7 @@
       await this.bulkRequest(MSG.DEV_START);
 
       this.readyState = T265DirectSocket.OPEN;
+      globalThis.dispatchEvent(new CustomEvent("realsense-t265-status", { detail: { active: true, firmware: info.firmware, transport: "webusb" } }));
       setTransportLabel("WEBUSB");
       setDirectHint(`T265 direct WebUSB started · FW ${info.firmware} · waiting for pose…`);
       this.onopen?.({ type: "open" });
@@ -321,6 +322,7 @@
           const now = performance.now();
           this.updateRate(now);
           const pose = this.parsePose(result.data);
+          globalThis.dispatchEvent(new CustomEvent("realsense-t265-pose", { detail: pose }));
           if (!this.lastViewerEmit || now - this.lastViewerEmit >= 15) {
             this.lastViewerEmit = now;
             this.emitMessage(pose);
@@ -337,6 +339,7 @@
         try { await this.bulkRequest(MSG.DEV_STOP); } catch (_) {}
       }
       this.streaming = false;
+      globalThis.dispatchEvent(new CustomEvent("realsense-t265-status", { detail: { active: false } }));
       const device = this.device;
       const interfaceNumber = this.interfaceNumber;
       this.device = null;
@@ -351,6 +354,7 @@
     fail(error) {
       console.error("T265 direct WebUSB failed", error);
       this.streaming = false;
+      globalThis.dispatchEvent(new CustomEvent("realsense-t265-status", { detail: { active: false, error: error?.message || String(error) } }));
       this.readyState = T265DirectSocket.CLOSED;
       setDirectHint(`T265 WebUSB error: ${error?.message || error}`);
       setTransportLabel("WEBUSB ERROR");
