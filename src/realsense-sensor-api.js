@@ -124,6 +124,8 @@ class RealSenseSensorHub {
       scaleM: Number(frame.scaleM ?? 0.001),
       lastHostMs: host,
       label: frame.label || "",
+      orientation: "physical-upright",
+      pixelTransform: "rotate180",
     };
     this.post({
       type: "d435_depth",
@@ -135,6 +137,8 @@ class RealSenseSensorHub {
       encoding: "z16le",
       depth_scale_m: Number(frame.scaleM ?? 0.001),
       origin: "top-left",
+      orientation: "physical-upright",
+      pixel_transform: "rotate180",
       data: frame.data,
     });
     if ((this.depthSeq & 7) === 0) this.emitStats();
