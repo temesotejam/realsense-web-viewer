@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="eyebrow">INTEL REALSENSE · WEB VISUALIZER</div>
-      <h1>RealSense Web Viewer</h1>
+      <h1>RealSense Web Viewer · Sensor Hub</h1>
     </div>
     <div id="connectionBadge" class="badge badge-demo">DEMO</div>
   </header>
@@ -77,6 +77,20 @@
         <button id="connectBridge" class="primary full-width">Connect</button>
         <p id="bridgeHint" class="hint">Native bridge and in-browser T265 WebUSB both feed this same live pose/depth path.</p>
       </section>
+      <section id="sensorHubPanel">
+        <h2>Sensor Hub API</h2>
+        <dl class="readout-list compact">
+          <div><dt>Channel</dt><dd id="hubChannel">realsense-sensor-api-v1</dd></div>
+          <div><dt>Clients</dt><dd id="hubClients">0</dd></div>
+          <div><dt>T265 Pose</dt><dd id="hubT265">OFF</dd></div>
+          <div><dt>D435 Depth</dt><dd id="hubDepth">OFF</dd></div>
+        </dl>
+        <p class="hint">Start D435 Depth, then connect T265 WebUSB. D435 keeps streaming in the background while T265 is active. Other pages on <code>temesotejam.github.io</code> can subscribe through BroadcastChannel.</p>
+        <div class="button-row">
+          <a class="button secondary" href="./sensor-api-test.html" target="_blank" rel="noopener">Open API test</a>
+        </div>
+      </section>
+
     </aside>
 
     <section class="workspace">
@@ -112,14 +126,14 @@
         </div>
         <div>
           <span class="status-label">Viewer</span>
-          <strong>v0.4</strong>
+          <strong>v0.5 HUB</strong>
         </div>
       </div>
     </section>
   </main>
 
   <footer>
-    RealSense Web Viewer · static GitHub Pages frontend · direct T265 WebUSB + D400 browser depth + native bridge
+    RealSense Web Viewer · Sensor Hub · direct T265 WebUSB + D435 browser depth + BroadcastChannel API
   </footer>
 
   <script src="src/t265-autoboot-relay.js"></script>
