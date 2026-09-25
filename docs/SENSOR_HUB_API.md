@@ -146,3 +146,16 @@ origin: top-left
 ```
 
 The same correction is applied to the live Depth viewer and probe coordinates. Consumers should use the published image as-is and must not apply another horizontal flip.
+
+
+### Physical orientation correction v2 — 20260925.7
+
+Physical testing showed build 20260925.6 was reversed on both horizontal and vertical axes. Build 20260925.7 therefore applies a 180-degree correction relative to that verified output. The published D435 frame is now tagged:
+
+```text
+orientation: physical-upright
+pixel_transform: physical-upright-v2
+orientation_build: 20260925.7
+```
+
+Consumers should use the published frame as-is.
