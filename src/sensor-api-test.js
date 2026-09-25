@@ -5,6 +5,11 @@ const client = new RealSenseSensorClient("sensor-api-test");
 let poseCount = 0, depthCount = 0, poseStart = performance.now(), depthStart = performance.now(), prevDepth = null;
 
 $("channel").textContent = REALSENSE_SENSOR_CHANNEL;
+const hubFrame = $("hubFrame");
+hubFrame?.addEventListener("load", () => {
+  setTimeout(() => client.requestStatus(), 400);
+  setTimeout(() => client.requestStatus(), 1200);
+});
 
 client.addEventListener("sensor_api_status", (e) => {
   const s = e.detail.status || {};
@@ -77,5 +82,6 @@ function drawDepth(m) {
 }
 
 $("refresh").onclick = () => client.requestStatus();
+setInterval(() => client.requestStatus(), 2000);
 window.addEventListener("beforeunload", () => client.close());
 client.requestStatus();
