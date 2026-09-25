@@ -68,6 +68,15 @@ class RealSenseSensorHub {
       this.emitStats();
     } else if (message.type === "sensor_api_status_request") {
       this.post({ type: "sensor_api_status", request_id: message.request_id || null, status: structuredClone(this.stats) });
+    } else if (message.type === "sensor_api_start" || message.type === "sensor_api_stop" || message.type === "sensor_api_restart") {
+      globalThis.dispatchEvent(new CustomEvent("realsense-hub-command", {
+        detail: {
+          type: message.type,
+          request_id: message.request_id || null,
+          client_id: message.client_id || null,
+          options: message.options || {},
+        },
+      }));
     }
   }
 
@@ -141,6 +150,10 @@ class RealSenseSensorHub {
     this.stats.t265 = { ...this.stats.t265, ...status };
     this.emitStats();
     this.post({ type: "t265_status", status: { ...this.stats.t265 } });
+  }
+
+  publishControlResult(type, requestId, result = {}) {
+    this.post({ type, request_id: requestId || null, ...result });
   }
 }
 
