@@ -2,9 +2,35 @@
 
 Browser-based visualization for Intel RealSense depth and tracking cameras. The project is intentionally **browser-first**: use standard browser camera/USB APIs where they preserve the RealSense data, and keep a native `librealsense` bridge only as a fallback/reference path.
 
-> Status: experimental v0.4 — direct D400 depth and the complete T265 browser-only boot → Intel official firmware relay → runtime → live 6DoF → 3D viewer path are physically verified in desktop Chromium.
+> Status: experimental v0.5 — direct D400 depth and the complete T265 browser-only boot → runtime → live 6DoF path are physically verified. The root viewer now also acts as a same-origin Sensor Hub that publishes T265 pose and D435 depth to other browser apps.
 
 ## Current status at a glance
+
+### Sensor Hub API
+
+The root viewer can now keep D435 Depth and T265 WebUSB active at the same time and publish normalized sensor data through:
+
+```text
+BroadcastChannel: realsense-sensor-api-v1
+```
+
+Current API streams:
+
+- T265 raw 6DoF pose from the direct WebUSB receiver, before viewer-rate throttling
+- D435 Depth as 320×240 Z16 at up to 10 Hz
+- Hub/device status and client discovery
+
+Typical workflow:
+
+```text
+D400 tab -> Start Depth
+        -> Connect T265 WebUSB
+        -> D435 continues in background
+        -> T265 pose + D435 depth are published to other same-origin pages
+```
+
+Open `sensor-api-test.html` in another tab to verify both streams. See `docs/SENSOR_HUB_API.md` for the protocol and client library.
+
 
 ### D400 / D405
 
