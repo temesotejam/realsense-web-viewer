@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0f14">
+<title>RealSense Sensor Hub</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0f14;color:#e6edf3}
+main{padding:10px;display:grid;gap:8px}
+.status{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cell{border:1px solid #28313c;background:#111820;border-radius:9px;padding:8px}
+.cell small{display:block;color:#8b949e;margin-bottom:4px}.cell strong{font:600 12px ui-monospace,monospace}
+[data-kind="error"]{color:#f85149}
+#headlessSupport{position:absolute;left:-10000px;top:-10000px;width:640px;height:480px;overflow:hidden}
+#viewerCanvas{width:640px;height:480px}.canvas-shell{position:relative;width:640px;height:480px}
+#d400Controls,#t265Controls,#liveControls{display:block}
+@media(max-width:700px){.status{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<main>
+  <div class="status">
+    <div class="cell"><small>Hub</small><strong id="hubState">STARTING</strong></div>
+    <div class="cell"><small>D435 Depth</small><strong id="depthState">STARTING</strong></div>
+    <div class="cell"><small>T265 Pose</small><strong id="t265State">STARTING</strong></div>
+    <div class="cell"><small>API clients</small><strong id="clientCount">0</strong></div>
+  </div>
+  <div id="permissionNote" class="cell"><small>Permissions</small><strong>Previously authorized devices start automatically. First-time browser permission/USB authorization still requires browser approval.</strong></div>
+</main>
+
+<div id="headlessSupport" aria-hidden="true">
+  <div id="connectionBadge"></div>
+  <div id="deviceModel"></div><div id="deviceStatus"></div>
+  <div id="viewerTitle"></div><div id="viewerSubtitle"></div><div id="overlayText"></div>
+  <div id="statusMode"></div><div id="transportValue"></div>
+  <button id="pauseButton">Pause</button>
+
+  <section id="d400Controls">
+    <input id="depthRange" type="range" min="1" max="10" step="0.1" value="4">
+    <span id="depthRangeLabel">4.0 m</span>
+    <dl class="readout-list">
+      <div><dt>X</dt><dd id="probeX">—</dd></div>
+      <div><dt>Y</dt><dd id="probeY">—</dd></div>
+      <div><dt>Depth</dt><dd id="probeDepth">—</dd></div>
+    </dl>
+  </section>
+
+  <section id="t265Controls">
+    <button id="connectT265Webusb">Connect T265</button>
+    <button id="openT265Boot">Boot</button>
+    <p id="t265WebusbHint"></p>
+  </section>
+  <section id="liveControls">
+    <input id="bridgeUrl" value="">
+    <button id="connectBridge">Connect</button>
+    <p id="bridgeHint"></p>
+  </section>
+
+  <div class="canvas-shell">
+    <canvas id="viewerCanvas" width="640" height="480"></canvas>
+    <div id="canvasOverlay"></div>
+  </div>
+</div>
+
+<script src="src/t265-autoboot-relay.js"></script>
+<script src="src/t265-direct.js"></script>
+<script type="module" src="src/realsense-sensor-api.js"></script>
+<script type="module" src="src/browser-depth.js"></script>
+<script type="module" src="src/sensor-hub-auto.js"></script>
+</body>
+</html>
