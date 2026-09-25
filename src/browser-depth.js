@@ -542,21 +542,10 @@ function createFloatDepthPipeline(canvas, video, width, height) {
 
   const apiWidth = 320;
   const apiHeight = 240;
-  const apiTexture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, apiTexture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, apiWidth, apiHeight, 0, gl.RED, gl.FLOAT, null);
-  const apiFramebuffer = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, apiFramebuffer);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, apiTexture, 0);
-  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-    throw new Error("Sensor Hub R32F framebuffer is incomplete.");
-  }
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  const apiFloat = new Float32Array(apiWidth * apiHeight);
+  // Read the verified source R32F framebuffer directly. This intentionally
+  // avoids an extra float framebuffer blit, because the source framebuffer is
+  // already the path used by the working raw-Z16 probe.
+  const nativeFloat = new Float32Array(canvas.width * canvas.height);
 
   const pipeline = {
     gl,
@@ -603,27 +592,23 @@ function createFloatDepthPipeline(canvas, video, width, height) {
     },
 
     readDepthZ16() {
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, apiFramebuffer);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
       clearGlErrors(gl);
-      gl.blitFramebuffer(0, 0, pipeline.width, pipeline.height, 0, 0, apiWidth, apiHeight, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-      const blitError = gl.getError();
-      if (blitError !== gl.NO_ERROR) {
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        throw new Error(`Sensor Hub depth downsample failed (WebGL error 0x${blitError.toString(16)}).`);
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, apiFramebuffer);
-      gl.readPixels(0, 0, apiWidth, apiHeight, gl.RED, gl.FLOAT, apiFloat);
+      gl.readPixels(0, 0, pipeline.width, pipeline.height, gl.RED, gl.FLOAT, nativeFloat);
       const readError = gl.getError();
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      if (readError !== gl.NO_ERROR) throw new Error(`Sensor Hub depth readback failed (WebGL error 0x${readError.toString(16)}).`);
+      if (readError !== gl.NO_ERROR) throw new Error(`Sensor Hub source depth readback failed (WebGL error 0x${readError.toString(16)}).`);
 
       const out = new Uint16Array(apiWidth * apiHeight);
+      const sx = pipeline.width / apiWidth;
+      const sy = pipeline.height / apiHeight;
       for (let y = 0; y < apiHeight; y++) {
-        const srcRow = apiHeight - 1 - y;
+        // WebGL readPixels starts at bottom-left; API frames use top-left.
+        const srcYTop = Math.min(pipeline.height - 1, Math.floor((y + 0.5) * sy));
+        const srcY = pipeline.height - 1 - srcYTop;
         for (let x = 0; x < apiWidth; x++) {
-          const normalized = apiFloat[srcRow * apiWidth + x];
+          const srcX = Math.min(pipeline.width - 1, Math.floor((x + 0.5) * sx));
+          const normalized = nativeFloat[srcY * pipeline.width + srcX];
           out[y * apiWidth + x] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
         }
       }
@@ -632,9 +617,7 @@ function createFloatDepthPipeline(canvas, video, width, height) {
 
     dispose() {
       gl.deleteFramebuffer(framebuffer);
-      gl.deleteFramebuffer(apiFramebuffer);
       gl.deleteTexture(texture);
-      gl.deleteTexture(apiTexture);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
     },
