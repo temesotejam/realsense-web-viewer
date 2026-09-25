@@ -158,7 +158,10 @@
   }
 
   async function requestInteractiveDevice() {
-    return requestInteractiveDevice();
+    const device = await originalRequestDevice({ filters: [...RUNTIME_FILTERS, BOOT_FILTER] });
+    if (isRuntime(device)) return device;
+    if (isBoot(device)) return bootDevice(device);
+    throw new Error("Selected USB device is not a supported T265 boot/runtime device.");
   }
 
   globalThis.RealSenseT265Boot = Object.freeze({
