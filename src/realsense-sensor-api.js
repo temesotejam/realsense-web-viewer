@@ -20,6 +20,7 @@ class RealSenseSensorHub {
     this.depthRate = { t: 0, n: 0, hz: 0 };
     this.channel?.addEventListener("message", (e) => this.onMessage(e.data));
     globalThis.addEventListener("realsense-t265-pose", (e) => this.publishPose(e.detail));
+    globalThis.addEventListener("realsense-t265-status", (e) => this.setT265Status(e.detail));
     globalThis.addEventListener("realsense-depth-frame", (e) => this.publishDepth(e.detail));
     globalThis.addEventListener("realsense-depth-status", (e) => this.setDepthStatus(e.detail));
     globalThis.realsenseSensorHub = this;
