@@ -18,9 +18,17 @@ export class RealSenseSensorClient extends EventTarget {
     else if (m.type === "d435_depth") this.depth = m;
     this.dispatchEvent(new CustomEvent(m.type || "message", { detail: m }));
   }
+  sendCommand(type, options = {}) {
+    const request_id = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    this.channel.postMessage({ type, protocol: 1, client_id: this.clientId, request_id, options });
+    return request_id;
+  }
   requestStatus() {
     this.channel.postMessage({ type: "sensor_api_status_request", protocol: 1, client_id: this.clientId, request_id: crypto.randomUUID?.() || null });
   }
+  start(options = {}) { return this.sendCommand("sensor_api_start", options); }
+  stop(options = {}) { return this.sendCommand("sensor_api_stop", options); }
+  restart(options = {}) { return this.sendCommand("sensor_api_restart", options); }
   close() {
     this.channel.postMessage({ type: "sensor_api_goodbye", protocol: 1, client_id: this.clientId });
     this.channel.close();
