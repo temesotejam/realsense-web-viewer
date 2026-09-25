@@ -511,10 +511,9 @@ function createFloatDepthPipeline(canvas, video, width, height) {
     out vec2 vUv;
     void main() {
       gl_Position = vec4(aPosition.x * 2.0 - 1.0, 1.0 - aPosition.y * 2.0, 0.0, 1.0);
-      // The D435 browser UVC depth image is 180° from the physical upright
-      // mounting used by this project. Rotate both axes so screen/API coordinates
-      // match the camera's physical orientation.
-      vUv = vec2(1.0 - aPosition.x, 1.0 - aPosition.y);
+      // The D435 browser UVC depth image needs only a horizontal correction.
+      // Vertical orientation is already corrected by the WebGL/readback coordinate path.
+      vUv = vec2(1.0 - aPosition.x, aPosition.y);
     }
   `;
 
@@ -641,8 +640,7 @@ function createFloatDepthPipeline(canvas, video, width, height) {
           const srcX = Math.min(pipeline.width - 1, Math.floor((x + 0.5) * sx));
           const normalized = nativeFloat[srcY * pipeline.width + srcX];
           const dstX = apiWidth - 1 - x;
-          const dstY = apiHeight - 1 - y;
-          out[dstY * apiWidth + dstX] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
+          out[y * apiWidth + dstX] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
         }
       }
       return out;
