@@ -133,3 +133,16 @@ which send `sensor_api_start`, `sensor_api_stop`, and `sensor_api_restart`.
 ### Browser permission limitation
 
 The first camera permission and the first WebUSB device authorization are controlled by the browser and cannot be silently granted by JavaScript. After the devices have been authorized for the origin, the headless Hub uses the permitted-device lists and starts without Viewer interaction.
+
+
+## D435 image orientation
+
+The D435 used by this project is mounted in its physically correct orientation, while the browser-visible Depth image appears reversed on both axes. Sensor Hub v1 therefore normalizes the D435 Depth stream before publishing it:
+
+```text
+pixel_transform: rotate180
+orientation: physical-upright
+origin: top-left
+```
+
+The same correction is applied to the live Depth viewer and probe coordinates. Consumers should use the published image as-is and must not apply another 180° rotation.
