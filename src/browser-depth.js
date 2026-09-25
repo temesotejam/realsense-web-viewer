@@ -144,6 +144,7 @@ function startBrowserDepthController() {
     mediaFrameCount: 0,
     lastMediaTime: null,
     cameraFps: 0,
+    lastApiEmit: 0,
   };
 
   ui.refresh.addEventListener("click", () => refreshDepthDevices(ui));
@@ -175,9 +176,13 @@ function startBrowserDepthController() {
 
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!direct.active) return;
       if (button.dataset.mode !== "d400") {
-        if (direct.active) stopDirectDepth(direct, ui, false);
-      } else if (direct.active) {
+        ui.liveCanvas.style.display = "none";
+        viewerCanvas.style.visibility = "visible";
+      } else {
+        ui.liveCanvas.style.display = "block";
+        viewerCanvas.style.visibility = "hidden";
         applyLiveUi(direct, ui);
       }
     });
@@ -281,6 +286,8 @@ async function startDirectDepth(direct, ui) {
     direct.mediaFrameCount = 0;
     direct.cameraFps = 0;
     direct.lastMediaTime = null;
+    direct.lastApiEmit = 0;
+    globalThis.dispatchEvent(new CustomEvent("realsense-depth-status", { detail: { active: true, label: direct.label, width: pipeline.width, height: pipeline.height, scaleM: pipeline.scaleM, sourceFps: Number(settings.frameRate || 0) } }));
 
     ui.liveCanvas.style.display = "block";
     viewerCanvas.style.visibility = "hidden";
@@ -311,6 +318,8 @@ function stopDirectDepth(direct, ui, restoreD400Demo) {
   direct.frameCallbackId = null;
   direct.fallbackTimer = null;
   direct.probe = null;
+  direct.lastApiEmit = 0;
+  globalThis.dispatchEvent(new CustomEvent("realsense-depth-status", { detail: { active: false } }));
 
   ui.liveCanvas.style.display = "none";
   viewerCanvas.style.visibility = "visible";
@@ -362,6 +371,20 @@ function scheduleDepthFrames(direct, ui) {
       direct.pipeline.maxRangeM = Number(ui.range.value) || 4;
       direct.pipeline.renderFrame();
       direct.mediaFrameCount++;
+      if (!direct.lastApiEmit || now - direct.lastApiEmit >= 100) {
+        direct.lastApiEmit = now;
+        const z16 = direct.pipeline.readDepthZ16();
+        globalThis.dispatchEvent(new CustomEvent("realsense-depth-frame", {
+          detail: {
+            width: 320,
+            height: 240,
+            data: z16,
+            scaleM: direct.pipeline.scaleM,
+            label: direct.label,
+            mediaTimestampMs: metadata?.mediaTime != null ? metadata.mediaTime * 1000 : null,
+          },
+        }));
+      }
 
       if (metadata?.mediaTime != null) {
         if (direct.lastMediaTime != null) {
@@ -517,6 +540,24 @@ function createFloatDepthPipeline(canvas, video, width, height) {
   const framebuffer = gl.createFramebuffer();
   const onePixel = new Float32Array(1);
 
+  const apiWidth = 320;
+  const apiHeight = 240;
+  const apiTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, apiTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, apiWidth, apiHeight, 0, gl.RED, gl.FLOAT, null);
+  const apiFramebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, apiFramebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, apiTexture, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+    throw new Error("Sensor Hub R32F framebuffer is incomplete.");
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const apiFloat = new Float32Array(apiWidth * apiHeight);
+
   const pipeline = {
     gl,
     width: canvas.width,
@@ -561,9 +602,39 @@ function createFloatDepthPipeline(canvas, video, width, height) {
       return onePixel[0];
     },
 
+    readDepthZ16() {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, apiFramebuffer);
+      clearGlErrors(gl);
+      gl.blitFramebuffer(0, 0, pipeline.width, pipeline.height, 0, 0, apiWidth, apiHeight, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      const blitError = gl.getError();
+      if (blitError !== gl.NO_ERROR) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        throw new Error(`Sensor Hub depth downsample failed (WebGL error 0x${blitError.toString(16)}).`);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, apiFramebuffer);
+      gl.readPixels(0, 0, apiWidth, apiHeight, gl.RED, gl.FLOAT, apiFloat);
+      const readError = gl.getError();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (readError !== gl.NO_ERROR) throw new Error(`Sensor Hub depth readback failed (WebGL error 0x${readError.toString(16)}).`);
+
+      const out = new Uint16Array(apiWidth * apiHeight);
+      for (let y = 0; y < apiHeight; y++) {
+        const srcRow = apiHeight - 1 - y;
+        for (let x = 0; x < apiWidth; x++) {
+          const normalized = apiFloat[srcRow * apiWidth + x];
+          out[y * apiWidth + x] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
+        }
+      }
+      return out;
+    },
+
     dispose() {
       gl.deleteFramebuffer(framebuffer);
+      gl.deleteFramebuffer(apiFramebuffer);
       gl.deleteTexture(texture);
+      gl.deleteTexture(apiTexture);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
     },
