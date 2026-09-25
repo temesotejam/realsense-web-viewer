@@ -11,10 +11,10 @@
 <body><main>
 <div class="card"><h1>RealSense Sensor Hub API Test</h1>
 <p><strong>Do not use a separate Hub tab for this test.</strong> Chrome may throttle the D435 video callback when that tab is in the background. Use the embedded Sensor Hub below so camera acquisition and API monitoring stay in the same foreground page.</p>
-<p>Inside the embedded Hub: select <strong>D400 → Start Depth</strong>, then connect <strong>T265 WebUSB</strong>. Move the D435 or place a hand in front of it: Checksum and Changed samples below should change continuously.</p>
+<p>The embedded headless Hub starts previously authorized D435 Depth and T265 automatically. No Viewer controls are required. Move the D435 or place a hand in front of it: Checksum and Changed samples below should change continuously.</p>
 <button id="refresh">Request status</button></div>
 <section class="card"><h2>Embedded Sensor Hub</h2>
-<iframe id="hubFrame" class="hub-frame" src="./?embeddedHub=1" allow="camera; usb" title="Embedded RealSense Sensor Hub"></iframe>
+<iframe id="hubFrame" class="hub-frame" src="./sensor-hub.html" allow="camera; usb" title="Embedded RealSense Sensor Hub"></iframe>
 </section>
 <div class="grid">
 <section class="card"><h2>Hub</h2><dl>
