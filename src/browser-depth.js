@@ -194,6 +194,32 @@ function startBrowserDepthController() {
     }
   });
 
+  async function startAuto() {
+    if (direct.active) return true;
+    const devices = await refreshDepthDevices(ui, false);
+    if (!devices.length) throw new Error("No permitted RealSense Depth input found.");
+    const preferred = devices.find((d) => /\(8086:0b07\)/i.test(d.label))
+      || devices.find((d) => /430|435/i.test(d.label))
+      || devices[0];
+    ui.device.value = preferred.deviceId;
+    await startDirectDepth(direct, ui);
+    if (!direct.active) throw new Error(ui.state?.textContent || "D435 Depth did not start.");
+    return true;
+  }
+
+  async function stopAuto() {
+    if (direct.active) stopDirectDepth(direct, ui, false);
+  }
+
+  globalThis.RealSenseDepthDirect = Object.freeze({
+    startAuto,
+    stop: stopAuto,
+    refresh: () => refreshDepthDevices(ui, false),
+    get active() { return direct.active; },
+    get label() { return direct.label; },
+    get fps() { return direct.cameraFps; },
+  });
+
   window.addEventListener("beforeunload", () => stopDirectDepth(direct, ui, false));
 }
 
