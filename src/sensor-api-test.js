@@ -1,4 +1,4 @@
-import { RealSenseSensorClient, REALSENSE_SENSOR_CHANNEL } from "./realsense-sensor-client.js?v=20260925.6";
+import { RealSenseSensorClient, REALSENSE_SENSOR_CHANNEL } from "./realsense-sensor-client.js?v=20260925.7";
 
 const $ = (id) => document.getElementById(id);
 const client = new RealSenseSensorClient("sensor-api-test");
