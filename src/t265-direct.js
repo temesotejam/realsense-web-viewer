@@ -18,6 +18,7 @@
   });
 
   const selected = { device: null };
+  let activeDirectSocket = null;
 
   function hex(value, width = 4) {
     return Number(value ?? 0).toString(16).toUpperCase().padStart(width, "0");
@@ -376,6 +377,50 @@
   PatchedWebSocket.prototype = NativeWebSocket.prototype;
   window.WebSocket = PatchedWebSocket;
 
+  function connectDevice(device) {
+    if (!device || !isRuntime(device)) throw new Error("T265 runtime device is not available.");
+    if (activeDirectSocket && activeDirectSocket.readyState !== T265DirectSocket.CLOSED) {
+      return activeDirectSocket;
+    }
+    selected.device = device;
+    activeDirectSocket = new T265DirectSocket(DIRECT_URL);
+    activeDirectSocket.onclose = () => { if (activeDirectSocket?.readyState === T265DirectSocket.CLOSED) activeDirectSocket = null; };
+    return activeDirectSocket;
+  }
+
+  async function connectPermitted() {
+    if (!("usb" in navigator)) throw new Error("WebUSB unavailable.");
+    let device = globalThis.RealSenseT265Boot?.resolvePermittedDevice
+      ? await globalThis.RealSenseT265Boot.resolvePermittedDevice()
+      : (await navigator.usb.getDevices()).find(isRuntime);
+    if (!device) return null;
+    return connectDevice(device);
+  }
+
+  async function connectInteractive() {
+    if (!("usb" in navigator)) throw new Error("WebUSB unavailable.");
+    const device = globalThis.RealSenseT265Boot?.requestInteractiveDevice
+      ? await globalThis.RealSenseT265Boot.requestInteractiveDevice()
+      : await navigator.usb.requestDevice({ filters: RUNTIME_FILTERS });
+    if (!device) return null;
+    return connectDevice(device);
+  }
+
+  async function disconnect() {
+    if (!activeDirectSocket) return;
+    const s = activeDirectSocket;
+    activeDirectSocket = null;
+    await s.close();
+  }
+
+  globalThis.RealSenseT265Direct = Object.freeze({
+    connectDevice,
+    connectPermitted,
+    connectInteractive,
+    disconnect,
+    get socket() { return activeDirectSocket; },
+  });
+
   async function chooseAndConnect() {
     if (!("usb" in navigator)) {
       setDirectHint("WebUSB unavailable. Use desktop Chrome/Edge over HTTPS.");
@@ -383,16 +428,22 @@
     }
     try {
       setDirectHint("Choose the 8087:0B37 T265 runtime device…");
-      const device = await navigator.usb.requestDevice({ filters: RUNTIME_FILTERS });
+      const device = globalThis.RealSenseT265Boot?.requestInteractiveDevice
+        ? await globalThis.RealSenseT265Boot.requestInteractiveDevice()
+        : await navigator.usb.requestDevice({ filters: RUNTIME_FILTERS });
       if (!device || !isRuntime(device)) return;
-      selected.device = device;
 
-      document.querySelector('.mode-button[data-mode="live"]')?.click();
+      // Keep the original Viewer path when its controls are present.
       const bridgeUrl = document.getElementById("bridgeUrl");
       const connectBridge = document.getElementById("connectBridge");
-      if (!bridgeUrl || !connectBridge) throw new Error("Main viewer live controls were not found.");
-      bridgeUrl.value = DIRECT_URL;
-      connectBridge.click();
+      if (bridgeUrl && connectBridge) {
+        selected.device = device;
+        document.querySelector('.mode-button[data-mode="live"]')?.click();
+        bridgeUrl.value = DIRECT_URL;
+        connectBridge.click();
+      } else {
+        connectDevice(device);
+      }
     } catch (error) {
       if (error?.name === "NotFoundError") {
         setDirectHint("No runtime T265 selected. If the device is 03E7:2150, use Boot Lab first.");
