@@ -148,6 +148,26 @@
     return RUNTIME_FILTERS.every((wanted) => filters.some((f) => f.vendorId === wanted.vendorId && f.productId === wanted.productId));
   }
 
+  async function resolvePermittedDevice() {
+    const devices = await navigator.usb.getDevices();
+    const runtime = devices.find(isRuntime);
+    if (runtime) return runtime;
+    const boot = devices.find(isBoot);
+    if (boot) return bootDevice(boot);
+    return null;
+  }
+
+  async function requestInteractiveDevice() {
+    return requestInteractiveDevice();
+  }
+
+  globalThis.RealSenseT265Boot = Object.freeze({
+    isRuntime,
+    isBoot,
+    resolvePermittedDevice,
+    requestInteractiveDevice,
+  });
+
   navigator.usb.requestDevice = async function patchedRequestDevice(options) {
     if (!isT265RuntimeRequest(options)) return originalRequestDevice(options);
     setHint("Select the connected T265. Boot mode (03E7:2150) and runtime mode (8087:0B37) are both supported.");
