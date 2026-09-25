@@ -103,3 +103,33 @@ This API is intended to be consumed by `realsense-browser-slam` next.
 ## Current scope
 
 v1 publishes T265 pose and D435 depth. D435 RGB remains directly available through the browser UVC path and can be added to the hub after the pose/depth transport is physically verified.
+
+
+## Headless Hub
+
+Normal applications should embed:
+
+```text
+https://temesotejam.github.io/realsense-web-viewer/sensor-hub.html
+```
+
+The page has no required operator controls. On load it automatically:
+
+1. finds an already-permitted RealSense Depth UVC input and starts it;
+2. finds an already-authorized T265 runtime, or an already-authorized boot device and boots it;
+3. publishes both streams on `realsense-sensor-api-v1`;
+4. retries missing devices after reconnect.
+
+The client can also issue:
+
+```js
+client.start();
+client.stop();
+client.restart();
+```
+
+which send `sensor_api_start`, `sensor_api_stop`, and `sensor_api_restart`.
+
+### Browser permission limitation
+
+The first camera permission and the first WebUSB device authorization are controlled by the browser and cannot be silently granted by JavaScript. After the devices have been authorized for the origin, the headless Hub uses the permitted-device lists and starts without Viewer interaction.
