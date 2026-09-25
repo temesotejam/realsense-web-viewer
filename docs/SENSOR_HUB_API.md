@@ -137,12 +137,12 @@ The first camera permission and the first WebUSB device authorization are contro
 
 ## D435 image orientation
 
-The D435 used by this project is mounted in its physically correct orientation, while the browser-visible Depth image appears reversed on both axes. Sensor Hub v1 therefore normalizes the D435 Depth stream before publishing it:
+The D435 used by this project is mounted in its physically correct orientation. Physical testing showed that the browser-visible Depth image requires only a horizontal correction; vertical orientation is already handled by the WebGL/readback coordinate path. Sensor Hub v1 therefore normalizes the D435 Depth stream before publishing it:
 
 ```text
-pixel_transform: rotate180
+pixel_transform: flip-x
 orientation: physical-upright
 origin: top-left
 ```
 
-The same correction is applied to the live Depth viewer and probe coordinates. Consumers should use the published image as-is and must not apply another 180° rotation.
+The same correction is applied to the live Depth viewer and probe coordinates. Consumers should use the published image as-is and must not apply another horizontal flip.
