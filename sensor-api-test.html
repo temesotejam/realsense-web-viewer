@@ -9,7 +9,7 @@
 </style>
 </head>
 <body><main>
-<div class="card"><h1>RealSense Sensor Hub API Test</h1><p>Keep the main <a href="./" target="_blank">RealSense Web Viewer / Sensor Hub</a> open, start D435 Depth and connect T265, then use this page to verify cross-page delivery.</p><button id="refresh">Request status</button></div>
+<div class="card"><h1>RealSense Sensor Hub API Test</h1><p>Keep the main <a href="./" target="_blank">RealSense Web Viewer / Sensor Hub</a> open, start D435 Depth and connect T265, then use this page to verify cross-page delivery. Move the D435 or place a hand in front of it: Checksum and Changed samples should change every frame.</p><button id="refresh">Request status</button></div>
 <div class="grid">
 <section class="card"><h2>Hub</h2><dl>
 <div><dt>Status</dt><dd id="hubStatus">WAITING</dd></div>
@@ -30,5 +30,9 @@
 <div><dt>Received rate</dt><dd id="depthRate">—</dd></div>
 <div><dt>Sequence</dt><dd id="depthSeq">—</dd></div>
 <div><dt>Frame</dt><dd id="depthShape">—</dd></div>
+<div><dt>Min / Max</dt><dd id="depthMinMax">—</dd></div>
+<div><dt>Nonzero</dt><dd id="depthNonzero">—</dd></div>
+<div><dt>Checksum</dt><dd id="depthChecksum">—</dd></div>
+<div><dt>Changed samples</dt><dd id="depthChanged">—</dd></div>
 </dl><canvas id="depthCanvas" width="320" height="240"></canvas></section>
 </main><script type="module" src="src/sensor-api-test.js"></script></body></html>
