@@ -38,6 +38,7 @@ jobs:
           node --check src/realsense-sensor-api.js
           node --check src/realsense-sensor-client.js
           node --check src/sensor-api-test.js
+          node --check src/sensor-hub-auto.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
