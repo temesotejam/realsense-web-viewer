@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RealSense Sensor Hub API Test</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif}body{margin:0;background:#0b0f14;color:#e6edf3}main{max-width:1100px;margin:auto;padding:24px}.card{background:#111820;border:1px solid #28313c;border-radius:14px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}dl{display:grid;gap:8px}dl div{display:flex;justify-content:space-between;border-bottom:1px solid #202a35;padding:7px 0}dd{margin:0;font-family:ui-monospace,monospace;text-align:right}canvas{width:100%;image-rendering:pixelated;background:#05080b;border-radius:10px}button,a{background:#18212b;color:#e6edf3;border:1px solid #3a4654;border-radius:8px;padding:9px 12px;text-decoration:none}code{font-family:ui-monospace,monospace}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif}body{margin:0;background:#0b0f14;color:#e6edf3}main{max-width:1100px;margin:auto;padding:24px}.card{background:#111820;border:1px solid #28313c;border-radius:14px;padding:18px;margin-bottom:16px}.hub-frame{width:100%;height:760px;border:1px solid #28313c;border-radius:12px;background:#0b0f14}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}dl{display:grid;gap:8px}dl div{display:flex;justify-content:space-between;border-bottom:1px solid #202a35;padding:7px 0}dd{margin:0;font-family:ui-monospace,monospace;text-align:right}canvas{width:100%;image-rendering:pixelated;background:#05080b;border-radius:10px}button,a{background:#18212b;color:#e6edf3;border:1px solid #3a4654;border-radius:8px;padding:9px 12px;text-decoration:none}code{font-family:ui-monospace,monospace}@media(max-width:760px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
-<div class="card"><h1>RealSense Sensor Hub API Test</h1><p>Keep the main <a href="./" target="_blank">RealSense Web Viewer / Sensor Hub</a> open, start D435 Depth and connect T265, then use this page to verify cross-page delivery. Move the D435 or place a hand in front of it: Checksum and Changed samples should change every frame.</p><button id="refresh">Request status</button></div>
+<div class="card"><h1>RealSense Sensor Hub API Test</h1>
+<p><strong>Do not use a separate Hub tab for this test.</strong> Chrome may throttle the D435 video callback when that tab is in the background. Use the embedded Sensor Hub below so camera acquisition and API monitoring stay in the same foreground page.</p>
+<p>Inside the embedded Hub: select <strong>D400 → Start Depth</strong>, then connect <strong>T265 WebUSB</strong>. Move the D435 or place a hand in front of it: Checksum and Changed samples below should change continuously.</p>
+<button id="refresh">Request status</button></div>
+<section class="card"><h2>Embedded Sensor Hub</h2>
+<iframe id="hubFrame" class="hub-frame" src="./?embeddedHub=1" allow="camera; usb" title="Embedded RealSense Sensor Hub"></iframe>
+</section>
 <div class="grid">
 <section class="card"><h2>Hub</h2><dl>
 <div><dt>Status</dt><dd id="hubStatus">WAITING</dd></div>
