@@ -1,3 +1,4 @@
+import { sensorHub, REALSENSE_SENSOR_CHANNEL } from "./realsense-sensor-api.js";
 const $ = (id) => document.getElementById(id);
 
 const canvas = $("viewerCanvas");
@@ -34,6 +35,10 @@ const ui = {
   probeX: $("probeX"),
   probeY: $("probeY"),
   probeDepth: $("probeDepth"),
+  hubChannel: $("hubChannel"),
+  hubClients: $("hubClients"),
+  hubT265: $("hubT265"),
+  hubDepth: $("hubDepth"),
 };
 
 const state = {
@@ -80,9 +85,24 @@ function setBadge(text, kind = "demo") {
   ui.badge.className = `badge badge-${kind}`;
 }
 
+function isDirectT265Socket() { return state.socket?.url === "webusb-t265://runtime" && state.socket?.readyState !== WebSocket.CLOSED; }
+
 function setMode(mode) {
   state.mode = mode;
-  document.querySelectorAll(".mode-button").forEach((button) => {
+  if (ui.hubChannel) ui.hubChannel.textContent = REALSENSE_SENSOR_CHANNEL;
+sensorHub.onStats((stats) => {
+  if (ui.hubClients) ui.hubClients.textContent = String(stats.clients || 0);
+  if (ui.hubT265) {
+    const t = stats.t265 || {};
+    ui.hubT265.textContent = t.active ? `LIVE · ${Number(t.hz || 0).toFixed(1)} Hz · conf ${t.confidence ?? 0}` : "OFF";
+  }
+  if (ui.hubDepth) {
+    const d = stats.d435 || {};
+    ui.hubDepth.textContent = d.active ? `LIVE · ${d.width || 0}×${d.height || 0} · ${Number(d.hz || 0).toFixed(1)} Hz` : "OFF";
+  }
+});
+
+document.querySelectorAll(".mode-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === mode);
   });
 
@@ -92,7 +112,7 @@ function setMode(mode) {
   state.probe = null;
 
   if (mode === "t265") {
-    closeSocket();
+    if (!isDirectT265Socket()) closeSocket();
     setBadge("DEMO", "demo");
     ui.model.textContent = "T265 demo";
     ui.status.textContent = "Simulated";
@@ -103,7 +123,7 @@ function setMode(mode) {
     ui.transport.textContent = "INTERNAL";
     state.liveStream = null;
   } else if (mode === "d400") {
-    closeSocket();
+    if (!isDirectT265Socket()) closeSocket();
     setBadge("DEMO", "demo");
     ui.model.textContent = "D435/D455 demo";
     ui.status.textContent = "Simulated";
@@ -449,7 +469,7 @@ function animationLoop(now) {
   updateFps(now);
 
   if (!state.paused) {
-    if (state.mode === "t265") {
+    if (state.mode === "t265" && !isDirectT265Socket()) {
       const t = (now - state.demoStart) / 1000;
       state.pose = demoPose(t);
       appendTrajectory(state.pose);
@@ -539,13 +559,15 @@ function handleBridgeMessage(message) {
       confidence: Number(message.tracker_confidence ?? message.confidence ?? 0),
     };
     state.liveStream = "pose";
-    ui.t265Controls.hidden = false;
-    ui.d400Controls.hidden = true;
     appendTrajectory(state.pose);
     updatePoseReadouts(state.pose);
-    ui.viewerTitle.textContent = "Live · T265 pose";
-    ui.overlay.textContent = "Live 6DoF tracking stream";
-    ui.statusMode.textContent = "T265 LIVE";
+    if (state.mode !== "d400") {
+      ui.t265Controls.hidden = false;
+      ui.d400Controls.hidden = true;
+      ui.viewerTitle.textContent = "Live · T265 pose";
+      ui.overlay.textContent = "Live 6DoF tracking stream";
+      ui.statusMode.textContent = "T265 LIVE";
+    }
     return;
   }
 
