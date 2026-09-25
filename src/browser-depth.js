@@ -449,8 +449,8 @@ function updateProbe(direct, ui) {
   if (!direct.active || !direct.pipeline || !direct.probe) return;
   const displayX = Math.min(direct.pipeline.width - 1, Math.floor(direct.probe.x * direct.pipeline.width));
   const displayY = Math.min(direct.pipeline.height - 1, Math.floor(direct.probe.y * direct.pipeline.height));
-  const x = direct.pipeline.width - 1 - displayX;
-  const y = direct.pipeline.height - 1 - displayY;
+  const x = displayX;
+  const y = displayY;
   const normalized = direct.pipeline.readNormalizedDepth(x, y);
   const z16 = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
   const distanceM = z16 * depthScale(ui);
@@ -511,9 +511,9 @@ function createFloatDepthPipeline(canvas, video, width, height) {
     out vec2 vUv;
     void main() {
       gl_Position = vec4(aPosition.x * 2.0 - 1.0, 1.0 - aPosition.y * 2.0, 0.0, 1.0);
-      // The D435 browser UVC depth image needs only a horizontal correction.
-      // Vertical orientation is already corrected by the WebGL/readback coordinate path.
-      vUv = vec2(1.0 - aPosition.x, aPosition.y);
+      // Physical verification: the previous Hub output was reversed on both axes.
+      // Rotate that output by 180 degrees to match the physical camera mounting.
+      vUv = vec2(aPosition.x, 1.0 - aPosition.y);
     }
   `;
 
@@ -639,8 +639,8 @@ function createFloatDepthPipeline(canvas, video, width, height) {
         for (let x = 0; x < apiWidth; x++) {
           const srcX = Math.min(pipeline.width - 1, Math.floor((x + 0.5) * sx));
           const normalized = nativeFloat[srcY * pipeline.width + srcX];
-          const dstX = apiWidth - 1 - x;
-          out[y * apiWidth + dstX] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
+          const dstY = apiHeight - 1 - y;
+          out[dstY * apiWidth + x] = Math.max(0, Math.min(65535, Math.round(normalized * 65535)));
         }
       }
       return out;
